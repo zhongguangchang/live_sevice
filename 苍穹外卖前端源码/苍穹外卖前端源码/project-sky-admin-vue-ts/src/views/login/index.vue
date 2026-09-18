@@ -1,17 +1,24 @@
 <template>
   <div class="login">
     <div class="login-box">
-      <img src="@/assets/login/login-l.png" alt="" />
+      <!-- 左侧品牌区：用渐变色块替代原来的外卖插画 -->
+      <div class="brand-panel">
+        <div class="brand-logo">
+          <i class="el-icon-service" />
+          <span>生活服务网</span>
+        </div>
+        <p class="brand-slogan">家政保洁 · 家电维修 · 搬家运输</p>
+        <p class="brand-slogan">开锁换锁 · 管道疏通 · 上门服务</p>
+        <div class="brand-divider" />
+        <p class="brand-desc">
+          在线预约上门服务，师傅接单、服务进度实时可查、完成后可评价
+        </p>
+      </div>
+
+      <!-- 右侧登录表单 -->
       <div class="login-form">
+        <div class="login-form-title">账号登录</div>
         <el-form ref="loginForm" :model="loginForm" :rules="loginRules">
-          <div class="login-form-title">
-            <img
-              src="@/assets/login/icon_logo.png"
-              style="width: 149px; height: 38px"
-              alt=""
-            />
-            <!-- <span class="title-label">生活服务网</span> -->
-          </div>
           <el-form-item prop="username">
             <el-input
               v-model="loginForm.username"
@@ -39,11 +46,12 @@
               style="width: 100%"
               @click.native.prevent="handleLogin"
             >
-              <span v-if="!loading">登录</span>
+              <span v-if="!loading">登 录</span>
               <span v-else>登录中...</span>
             </el-button>
           </el-form-item>
         </el-form>
+        <p class="login-tip">默认账号 admin / 123456</p>
       </div>
     </div>
   </div>
@@ -124,60 +132,96 @@ export default class extends Vue {
   justify-content: center;
   align-items: center;
   height: 100%;
-  // background: #476dbe;
-  background-color: #333;
+  // 深海军蓝到品牌蓝的渐变，和侧边栏同一套色系
+  background: linear-gradient(135deg, #16203A 0%, #2B6DE8 100%);
 }
 
 .login-box {
-  width: 1000px;
-  height: 474.38px;
-  border-radius: 8px;
+  width: 860px;
+  height: 460px;
+  border-radius: 12px;
+  overflow: hidden;
   display: flex;
-  img {
-    width: 60%;
-    height: auto;
+  box-shadow: 0 18px 48px rgba(10, 22, 48, 0.35);
+}
+
+/* 左侧品牌区 */
+.brand-panel {
+  width: 58%;
+  padding: 46px 40px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(160deg, #1E2C4C 0%, #2B6DE8 100%);
+  position: relative;
+
+  .brand-logo {
+    display: flex;
+    align-items: center;
+    margin-bottom: 26px;
+    i {
+      font-size: 30px;
+    }
+    span {
+      margin-left: 10px;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 2px;
+    }
+  }
+  .brand-slogan {
+    margin: 0 0 6px;
+    font-size: 14px;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.88);
+  }
+  .brand-divider {
+    width: 44px;
+    height: 3px;
+    margin: 22px 0;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.6);
+  }
+  .brand-desc {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.9;
+    color: rgba(255, 255, 255, 0.72);
   }
 }
 
-.title {
-  margin: 0px auto 10px auto;
-  text-align: left;
-  color: #707070;
-}
-
+/* 右侧表单 */
 .login-form {
+  width: 42%;
   background: #ffffff;
-  width: 40%;
-  border-radius: 0px 8px 8px 0px;
+  padding: 0 40px;
+  box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   justify-content: center;
-  align-items: center;
+
   .el-form {
-    width: 214px;
-    height: 307px;
+    width: 100%;
   }
   .el-form-item {
-    margin-bottom: 30px;
+    margin-bottom: 26px;
   }
   .el-form-item.is-error .el-input__inner {
     border: 0 !important;
     border-bottom: 1px solid #fd7065 !important;
     background: #fff !important;
   }
-  .input-icon {
-    height: 32px;
-    width: 18px;
-    margin-left: -2px;
-  }
   .el-input__inner {
     border: 0;
     border-bottom: 1px solid #e9e9e8;
     border-radius: 0;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 400;
     color: #333333;
-    height: 32px;
-    line-height: 32px;
+    height: 34px;
+    line-height: 34px;
   }
   .el-input__prefix {
     left: 0;
@@ -189,42 +233,39 @@ export default class extends Vue {
     color: #aeb5c4;
   }
   .el-form-item--medium .el-form-item__content {
-    line-height: 32px;
+    line-height: 34px;
   }
   .el-input--medium .el-input__icon {
-    line-height: 32px;
+    line-height: 34px;
   }
 }
 
+.login-form-title {
+  margin-bottom: 34px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1B2437;
+}
+
 .login-btn {
-  border-radius: 17px;
-  padding: 11px 20px !important;
-  margin-top: 10px;
-  font-weight: 500;
-  font-size: 12px;
+  border-radius: 20px;
+  padding: 12px 20px !important;
+  margin-top: 6px;
+  font-size: 13px;
+  letter-spacing: 2px;
   border: 0;
-  font-weight: 500;
-  color: #333333;
-  // background: #09a57a;
-  background-color: #ffc200;
+  background: linear-gradient(90deg, #2B6DE8 0%, #4C8DFF 100%);
   &:hover,
   &:focus {
-    // background: #09a57a;
-    background-color: #ffc200;
+    background: linear-gradient(90deg, #4C8DFF 0%, #2B6DE8 100%);
     color: #ffffff;
   }
 }
-.login-form-title {
-  height: 36px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 40px;
-  .title-label {
-    font-weight: 500;
-    font-size: 20px;
-    color: #333333;
-    margin-left: 10px;
-  }
+
+.login-tip {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: #aeb5c4;
 }
 </style>

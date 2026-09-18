@@ -453,7 +453,7 @@ export default Vue.extend({
   text-align: right;
 }
 .price {
-  color: #e95f3c;
+  color: #F56C6C;
   font-weight: 600;
 }
 .origin-price {

@@ -380,7 +380,7 @@ export default Vue.extend({
 .search-card { margin-bottom: 12px; }
 .table-card { margin-bottom: 16px; }
 .pager { margin-top: 14px; text-align: right; }
-.price { color: #e95f3c; font-weight: 600; }
+.price { color: #F56C6C; font-weight: 600; }
 .origin-price { margin-left: 6px; color: #999; text-decoration: line-through; font-size: 12px; }
 .item-tag { margin: 2px 4px 2px 0; }
 .item-editor { width: 100%; }

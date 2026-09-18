@@ -11,14 +11,12 @@
         alt=""
         style="width: 120px; height: 31px"
       /> -->
-      <div v-if="!isCollapse"
-           class="sidebar-logo">
-        <img src="@/assets/login/logo.png"
-             style="width: 120px; height: 31px">
+      <div v-if="!isCollapse" class="sidebar-logo">
+        <i class="el-icon-service brand-mark" />
+        <span class="brand-name">生活服务网</span>
       </div>
-      <div v-else
-           class="sidebar-logo-mini">
-        <img src="@/assets/login/mini-logo.png">
+      <div v-else class="sidebar-logo-mini">
+        <i class="el-icon-service brand-mark" />
       </div>
     </div>
     <el-scrollbar wrap-class="scrollbar-wrapper">

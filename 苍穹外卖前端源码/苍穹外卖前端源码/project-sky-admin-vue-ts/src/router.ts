@@ -123,15 +123,14 @@ const router = new Router({
             icon: "icon-category"
           }
         },
-        {
-          path: "/statistics",
-          component: () =>
-            import(/* webpackChunkName: "statistics" */ "@/views/statistics/index.vue"),
-          meta: {
-            title: "数据统计",
-            icon: "icon-statistics"
-          }
-        },
+        // 数据统计页依赖外卖时期的报表接口（查 orders 表），
+        // 待后端报表模块按 service_order 重写后再放开
+        // {
+        //   path: "/statistics",
+        //   component: () =>
+        //     import(/* webpackChunkName: "statistics" */ "@/views/statistics/index.vue"),
+        //   meta: { title: "数据统计", icon: "icon-statistics" }
+        // },
         {
           path: "category",
           component: () =>

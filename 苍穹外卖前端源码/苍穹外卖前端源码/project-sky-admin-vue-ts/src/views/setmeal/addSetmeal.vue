@@ -455,7 +455,7 @@ export default class extends Vue {
   }
 
   .avatar-uploader .el-upload:hover {
-    border-color: #ffc200;
+    border-color: #2B6DE8;
   }
 
   .avatar-uploader-icon {
@@ -572,7 +572,7 @@ export default class extends Vue {
         width: 777px;
 
         .addBut {
-          background: #ffc200;
+          background: #2B6DE8;
           display: inline-block;
           padding: 0px 20px;
           border-radius: 3px;

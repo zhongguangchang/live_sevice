@@ -471,7 +471,7 @@ export default class extends Vue {
   width: 777px;
 
   .addBut {
-    background: #ffc200;
+    background: #2B6DE8;
     display: inline-block;
     padding: 0px 20px;
     border-radius: 3px;
@@ -524,7 +524,7 @@ export default class extends Vue {
 
           span {
             display: inline-block;
-            color: #ffc200;
+            color: #2B6DE8;
             margin: 5px;
             line-height: 26px;
             padding: 0 10px;

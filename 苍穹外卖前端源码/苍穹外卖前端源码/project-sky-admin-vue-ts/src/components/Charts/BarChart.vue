@@ -82,7 +82,7 @@ export default class extends mixins(ResizeMixin) {
                     'itemStyle': {
                         'normal': {
                             'color': function (params:any) {
-                                var colorList = ['#389BFF', '#FFC200', '#52C41A', '#08979C', '#597EF7', '#B37FEB','#FF7875', '#5CDBD3', '#FFC53D'];
+                                var colorList = ['#389BFF', '#2B6DE8', '#52C41A', '#08979C', '#597EF7', '#B37FEB','#FF7875', '#5CDBD3', '#FFC53D'];
                                 return colorList[params.dataIndex];
                             }
                         }

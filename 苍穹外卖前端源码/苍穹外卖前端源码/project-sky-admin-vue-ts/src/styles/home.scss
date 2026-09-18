@@ -51,7 +51,7 @@ li {
 
       .active {
         height: 38px;
-        background: #ffc200;
+        background: #2B6DE8;
       }
     }
   }
@@ -339,7 +339,7 @@ li {
       &.add {
         width: 100px;
         flex: none;
-        background: #FFC100;
+        background: #2B6DE8;
         border-radius: 4px;
         text-align: center;
         color: #333;
@@ -448,7 +448,7 @@ li {
     cursor: pointer;
 
     &.active {
-      background: #FFC200;
+      background: #2B6DE8;
     }
   }
 
@@ -635,7 +635,7 @@ display: -webkit-box;
     }
     &.one{
       span{
-        background:#FFC100 ;
+        background:#2B6DE8 ;
       }
 
    }
