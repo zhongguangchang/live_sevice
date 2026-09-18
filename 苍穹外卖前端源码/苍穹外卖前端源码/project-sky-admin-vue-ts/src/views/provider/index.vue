@@ -174,6 +174,24 @@ import {
 } from '@/api/provider'
 import { queryCategoryList } from '@/api/category'
 
+// 表单初始值。放在模块作用域而不是 methods 里，
+// 因为 data() 里要用它，而 data() 执行时 this 上还没有 methods，
+// TypeScript 会报 "Property 'emptyForm' does not exist"。
+function emptyForm() {
+  return {
+    id: null,
+    name: '',
+    phone: '',
+    sex: '1',
+    workYears: 0,
+    serviceMode: 1,
+    status: 1,
+    categoryIds: [] as number[],
+    intro: '',
+    certImage: ''
+  }
+}
+
 export default Vue.extend({
   name: 'Provider',
 
@@ -194,7 +212,7 @@ export default Vue.extend({
 
       dialogVisible: false,
       saving: false,
-      form: this.emptyForm(),
+      form: emptyForm(),
       rules: {
         name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
         phone: [
@@ -216,20 +234,7 @@ export default Vue.extend({
   },
 
   methods: {
-    emptyForm() {
-      return {
-        id: null,
-        name: '',
-        phone: '',
-        sex: '1',
-        workYears: 0,
-        serviceMode: 1,
-        status: 1,
-        categoryIds: [] as number[],
-        intro: '',
-        certImage: ''
-      }
-    },
+    emptyForm,
 
     statusText(s: number) {
       const hit = this.statusOptions.find((o: any) => o.value === s)

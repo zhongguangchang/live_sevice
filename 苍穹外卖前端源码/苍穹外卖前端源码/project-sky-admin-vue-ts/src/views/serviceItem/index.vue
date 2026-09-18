@@ -214,6 +214,27 @@ import {
 } from '@/api/serviceItem'
 import { queryCategoryList } from '@/api/category'
 
+// 表单初始值。放在模块作用域而不是 methods 里，
+// 因为 data() 里要用它，而 data() 执行时 this 上还没有 methods，
+// TypeScript 会报 "Property 'emptyForm' does not exist"。
+function emptyForm() {
+  return {
+    id: null,
+    name: '',
+    categoryId: null,
+    price: 0,
+    originalPrice: null,
+    unit: '次',
+    duration: 60,
+    serviceMode: 1,
+    needAppoint: 1,
+    image: '',
+    description: '',
+    status: 1,
+    specs: [] as any[]
+  }
+}
+
 export default Vue.extend({
   name: 'ServiceItem',
 
@@ -233,7 +254,7 @@ export default Vue.extend({
 
       dialogVisible: false,
       saving: false,
-      form: this.emptyForm(),
+      form: emptyForm(),
       rules: {
         name: [{ required: true, message: '请输入服务名称', trigger: 'blur' }],
         categoryId: [{ required: true, message: '请选择服务分类', trigger: 'change' }],
@@ -248,23 +269,7 @@ export default Vue.extend({
   },
 
   methods: {
-    emptyForm() {
-      return {
-        id: null,
-        name: '',
-        categoryId: null,
-        price: 0,
-        originalPrice: null,
-        unit: '次',
-        duration: 60,
-        serviceMode: 1,
-        needAppoint: 1,
-        image: '',
-        description: '',
-        status: 1,
-        specs: [] as any[]
-      }
-    },
+    emptyForm,
 
     serviceModeText(mode: number) {
       if (mode === 1) return '上门'

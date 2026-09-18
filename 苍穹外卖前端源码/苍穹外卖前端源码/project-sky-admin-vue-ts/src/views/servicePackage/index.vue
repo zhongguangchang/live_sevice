@@ -178,6 +178,25 @@ import {
 import { queryServiceItemList } from '@/api/serviceItem'
 import { queryCategoryList } from '@/api/category'
 
+// 表单初始值。放在模块作用域而不是 methods 里，
+// 因为 data() 里要用它，而 data() 执行时 this 上还没有 methods，
+// TypeScript 会报 "Property 'emptyForm' does not exist"。
+function emptyForm() {
+  return {
+    id: null,
+    name: '',
+    categoryId: null,
+    price: 0,
+    originalPrice: null,
+    image: '',
+    description: '',
+    duration: 120,
+    serviceMode: 1,
+    status: 1,
+    items: [] as any[]
+  }
+}
+
 export default Vue.extend({
   name: 'ServicePackage',
 
@@ -192,7 +211,7 @@ export default Vue.extend({
 
       dialogVisible: false,
       saving: false,
-      form: this.emptyForm(),
+      form: emptyForm(),
       rules: {
         name: [{ required: true, message: '请输入套餐名称', trigger: 'blur' }],
         categoryId: [{ required: true, message: '请选择套餐分类', trigger: 'change' }],
@@ -209,21 +228,7 @@ export default Vue.extend({
   },
 
   methods: {
-    emptyForm() {
-      return {
-        id: null,
-        name: '',
-        categoryId: null,
-        price: 0,
-        originalPrice: null,
-        image: '',
-        description: '',
-        duration: 120,
-        serviceMode: 1,
-        status: 1,
-        items: [] as any[]
-      }
-    },
+    emptyForm,
 
     loadCategories() {
       // 套餐分类是 type = 2，和服务项目分类分开

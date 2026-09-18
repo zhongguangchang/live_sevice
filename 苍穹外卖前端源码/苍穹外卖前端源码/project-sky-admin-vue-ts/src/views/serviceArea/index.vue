@@ -91,6 +91,13 @@ import {
   serviceAreaStatusByStatus
 } from '@/api/serviceArea'
 
+// 表单初始值。放在模块作用域而不是 methods 里，
+// 因为 data() 里要用它，而 data() 执行时 this 上还没有 methods，
+// TypeScript 会报 "Property 'emptyForm' does not exist"。
+function emptyForm() {
+  return { id: null, name: '', code: '', cityName: '', cityCode: '', sort: 0, status: 1 }
+}
+
 export default Vue.extend({
   name: 'ServiceArea',
 
@@ -100,7 +107,7 @@ export default Vue.extend({
       tableData: [] as any[],
       loading: false,
       dialogVisible: false,
-      form: this.emptyForm(),
+      form: emptyForm(),
       rules: {
         name: [{ required: true, message: '请输入区域名称', trigger: 'blur' }],
         code: [{ required: true, message: '请输入区级区划编号', trigger: 'blur' }]
@@ -113,9 +120,7 @@ export default Vue.extend({
   },
 
   methods: {
-    emptyForm() {
-      return { id: null, name: '', code: '', cityName: '', cityCode: '', sort: 0, status: 1 }
-    },
+    emptyForm,
 
     loadData() {
       this.loading = true
