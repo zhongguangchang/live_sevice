@@ -49,3 +49,12 @@ export const enableOrDisableEmployee = (params: any) => {
     params: { id:params.id }
   })
 }
+
+// 按类型查询分类列表  type: 1服务项目分类 2服务套餐分类
+export const queryCategoryList = (params: any) => {
+  return request({
+    url: '/category/list',
+    method: 'get',
+    params
+  });
+};
