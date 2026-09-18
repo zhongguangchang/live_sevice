@@ -1,0 +1,101 @@
+server:
+  # 用 8081 而不是默认的 8080：本机 Windows 保留了 8080 端口
+  # （netsh int ipv4 show excludedportrange protocol=tcp 可以看到 80 和 8080
+  #   都在系统排除范围内，由 hns 主机网络服务预留，通常来自 Hyper-V/Docker），
+  # 任何程序都绑不上。改成 8081 即可，前端 .env.development 里的
+  # VUE_APP_URL / VUE_APP_SOCKET_URL 也要同步改成 8081。
+  port: 8081
+
+spring:
+  profiles:
+    active: dev
+  main:
+    allow-circular-references: true
+  # Spring Boot 2.6 起，Spring MVC 的路径匹配策略默认改成了 PathPatternParser，
+  # 而项目用的 Springfox 3.0.0（Knife4j 3.0.2 的底层）只兼容旧的 AntPathMatcher，
+  # 不显式指定的话启动时会报：
+  #   Failed to start bean 'documentationPluginsBootstrapper'
+  #   NullPointerException: PatternsRequestCondition.getPatterns() because "this.condition" is null
+  # 这里显式退回旧策略即可。这是原项目自带的问题，不是本次改造引入的。
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  datasource:
+    druid:
+      driver-class-name: ${sky.datasource.driver-class-name}
+      url: jdbc:mysql://${sky.datasource.host}:${sky.datasource.port}/${sky.datasource.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+      username: ${sky.datasource.username}
+      password: ${sky.datasource.password}
+  redis:
+    host: ${sky.redis.host}
+    port: ${sky.redis.port}
+    password: ${sky.redis.password}
+    database: ${sky.redis.database}
+  rabbitmq:
+    host: ${sky.rabbitmq.host}
+    port: ${sky.rabbitmq.port}
+    username: ${sky.rabbitmq.username}
+    password: ${sky.rabbitmq.password}
+    virtual-host: ${sky.rabbitmq.virtual-host}
+    # 开启生产者确认：消息成功到达交换机后回调，用于保证消息不丢
+    publisher-confirm-type: correlated
+    # 开启生产者退回：消息到了交换机但路由不到队列时回调，能及早发现路由键写错
+    publisher-returns: true
+    listener:
+      simple:
+        # ⚠ 手动 ACK：消费者处理成功后必须自己调用 channel.basicAck()，
+        #   处理失败调用 basicNack() 让消息重新入队，否则消息会一直挂在
+        #   unacked 状态堆积在 RabbitMQ 里。写消费者时务必注意这一点。
+        acknowledge-mode: manual
+        # 每个消费者一次只预取一条，避免消息全被一个实例抢走导致负载不均
+        prefetch: 1
+        retry:
+          enabled: true
+          max-attempts: 3
+
+mybatis:
+  #mapper配置文件
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.sky.entity
+  configuration:
+    #开启驼峰命名
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    com:
+      sky:
+        mapper: debug
+        service: info
+        controller: info
+
+sky:
+  jwt:
+    # 设置jwt签名加密时使用的秘钥
+    admin-secret-key: itcast
+    # 设置jwt过期时间
+    admin-ttl: 7200000
+    # 设置前端传递过来的令牌名称
+    admin-token-name: token
+    user-secret-key: itheima
+    user-ttl: 7200000
+    user-token-name: authentication
+  alioss:
+    endpoint: ${sky.alioss.endpoint}
+    access-key-id: ${sky.alioss.access-key-id}
+    access-key-secret: ${sky.alioss.access-key-secret}
+    bucket-name: ${sky.alioss.bucket-name}
+  wechat:
+    appid: ${sky.wechat.appid}
+    secret: ${sky.wechat.secret}
+    mchid : ${sky.wechat.mchid}
+    mchSerialNo: ${sky.wechat.mchSerialNo}
+    privateKeyFilePath: ${sky.wechat.privateKeyFilePath}
+    apiV3Key: ${sky.wechat.apiV3Key}
+    weChatPayCertFilePath: ${sky.wechat.weChatPayCertFilePath}
+    notifyUrl: ${sky.wechat.notifyUrl}
+    refundNotifyUrl: ${sky.wechat.refundNotifyUrl}
+  shop:
+    address: 北京市海淀区上地十街10号
+  baidu:
+    ak: your-ak

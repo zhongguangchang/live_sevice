@@ -1,0 +1,38 @@
+sky:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    host: localhost
+    port: 3306
+    # 生活服务网新库（原 sky_take_out 库保留未动，方便随时对照）
+    database: life_service
+    username: root
+    # 本机 MySQL 实际密码是 123456，原配置写的 root 是连不上的
+    password: 123456
+  alioss:
+    endpoint: oss-cn-beijing.aliyuncs.com
+    access-key-id: your-access-key-id
+    access-key-secret: your-access-key-secret
+    bucket-name: your-bucket-name
+  redis:
+    # Redis 部署在 Linux 虚拟机上
+    host: 192.168.229.129
+    port: 6379
+    password: 123456
+    database: 10
+  rabbitmq:
+    # RabbitMQ 部署在 Linux 虚拟机上
+    host: 192.168.229.129
+    port: 5672
+    username: admin
+    password: 123456
+    virtual-host: /
+  wechat:
+    appid: wxffb3637a228223b8
+    secret: 84311df9199ecacdf4f12d27b6b9522d
+    mchid : 1561414331
+    mchSerialNo: 4B3B3DC35414AD50B1B755BAF8DE9CC7CF407606
+    privateKeyFilePath: D:\pay\apiclient_key.pem
+    apiV3Key: CZBK51236435wxpay435434323FFDuv3
+    weChatPayCertFilePath: D:\pay\wechatpay_166D96F876F45C7D07CE98952A96EC980368ACFC.pem
+    notifyUrl: https://58869fb.r2.cpolar.top/notify/paySuccess
+    refundNotifyUrl: https://58869fb.r2.cpolar.top/notify/refundSuccess
