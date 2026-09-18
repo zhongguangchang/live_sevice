@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ReviewMapper">
+
+    <insert id="insert" parameterType="Review" useGeneratedKeys="true" keyProperty="id">
+        insert into review (order_id, user_id, provider_id, service_id,
+                            score, service_score, speed_score, quality_score,
+                            content, images, is_anonymous, reply, reply_time, status, create_time)
+        values (#{orderId}, #{userId}, #{providerId}, #{serviceId},
+                #{score}, #{serviceScore}, #{speedScore}, #{qualityScore},
+                #{content}, #{images}, #{isAnonymous}, #{reply}, #{replyTime}, #{status}, #{createTime})
+    </insert>
+
+    <!--
+      匿名评价在 SQL 层就把昵称和头像替换掉，而不是查出来再在 Java 里处理。
+      这么做是为了避免任何一条代码路径忘记脱敏而泄露用户身份 ——
+      数据根本没查出来，就不存在泄露的可能。
+    -->
+    <select id="pageQuery" parameterType="com.sky.dto.ReviewPageQueryDTO"
+            resultType="com.sky.vo.ReviewVO">
+        select r.id,
+               r.order_id,
+               r.user_id,
+               r.provider_id,
+               r.service_id,
+               r.score,
+               r.service_score,
+               r.speed_score,
+               r.quality_score,
+               r.content,
+               r.images,
+               r.is_anonymous,
+               r.reply,
+               r.reply_time,
+               r.status,
+               r.create_time,
+               case when r.is_anonymous = 1 then '匿名用户' else u.name end as userName,
+               case when r.is_anonymous = 1 then null else u.avatar end       as userAvatar,
+               p.name                                                          as providerName,
+               si.name                                                         as serviceName
+        from review r
+        left join `user` u on r.user_id = u.id
+        left join provider p on r.provider_id = p.id
+        left join service_item si on r.service_id = si.id
+        <where>
+            <if test="serviceId != null">
+                and r.service_id = #{serviceId}
+            </if>
+            <if test="providerId != null">
+                and r.provider_id = #{providerId}
+            </if>
+            <if test="userId != null">
+                and r.user_id = #{userId}
+            </if>
+            <if test="score != null">
+                and r.score = #{score}
+            </if>
+            <if test="status != null">
+                and r.status = #{status}
+            </if>
+        </where>
+        order by r.create_time desc
+    </select>
+
+    <select id="countByMap" resultType="java.lang.Integer">
+        select count(id) from review
+        <where>
+            <if test="providerId != null">
+                and provider_id = #{providerId}
+            </if>
+            <if test="serviceId != null">
+                and service_id = #{serviceId}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="score != null">
+                and score = #{score}
+            </if>
+        </where>
+    </select>
+
+    <select id="listByUserId" resultType="Review">
+        select * from review where user_id = #{userId} order by create_time desc
+    </select>
+
+</mapper>

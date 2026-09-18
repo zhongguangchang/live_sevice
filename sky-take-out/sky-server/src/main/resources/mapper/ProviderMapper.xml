@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ProviderMapper">
+
+    <insert id="insert" parameterType="Provider" useGeneratedKeys="true" keyProperty="id">
+        insert into provider (employee_id, openid, name, phone, avatar, sex, id_number, cert_image,
+                              work_years, intro, service_mode, status, score, good_rate, order_count,
+                              merchant_id, create_time, update_time, create_user, update_user)
+        values (#{employeeId}, #{openid}, #{name}, #{phone}, #{avatar}, #{sex}, #{idNumber}, #{certImage},
+                #{workYears}, #{intro}, #{serviceMode}, #{status}, #{score}, #{goodRate}, #{orderCount},
+                #{merchantId}, #{createTime}, #{updateTime}, #{createUser}, #{updateUser})
+    </insert>
+
+    <update id="update" parameterType="Provider">
+        update provider
+        <set>
+            <if test="employeeId != null">employee_id = #{employeeId},</if>
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="phone != null and phone != ''">phone = #{phone},</if>
+            <if test="avatar != null and avatar != ''">avatar = #{avatar},</if>
+            <if test="sex != null and sex != ''">sex = #{sex},</if>
+            <if test="idNumber != null and idNumber != ''">id_number = #{idNumber},</if>
+            <if test="certImage != null and certImage != ''">cert_image = #{certImage},</if>
+            <if test="workYears != null">work_years = #{workYears},</if>
+            <if test="intro != null">intro = #{intro},</if>
+            <if test="serviceMode != null">service_mode = #{serviceMode},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="updateUser != null">update_user = #{updateUser},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <!--
+      分页查询。categoryId 存在时要走 provider_skill 过滤，
+      用 distinct 是因为一个师傅可能配置了多个技能，join 后会出现重复行。
+    -->
+    <select id="pageQuery" resultType="com.sky.vo.ProviderVO">
+        select distinct p.*
+        from provider p
+        <if test="categoryId != null">
+            inner join provider_skill ps on p.id = ps.provider_id and ps.category_id = #{categoryId}
+        </if>
+        <where>
+            <if test="name != null and name != ''">
+                and p.name like concat('%', #{name}, '%')
+            </if>
+            <if test="status != null">
+                and p.status = #{status}
+            </if>
+        </where>
+        order by p.score desc, p.create_time desc
+    </select>
+
+    <select id="list" parameterType="Provider" resultType="Provider">
+        select * from provider
+        <where>
+            <if test="name != null and name != ''">
+                and name like concat('%', #{name}, '%')
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="serviceMode != null">
+                and service_mode = #{serviceMode}
+            </if>
+        </where>
+        order by score desc
+    </select>
+
+    <select id="countByMap" resultType="java.lang.Integer">
+        select count(id) from provider
+        <where>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+        </where>
+    </select>
+
+</mapper>

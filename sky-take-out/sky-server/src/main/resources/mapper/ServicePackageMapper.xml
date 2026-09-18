@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ServicePackageMapper">
+
+    <insert id="insert" parameterType="ServicePackage" useGeneratedKeys="true" keyProperty="id">
+        insert into service_package (category_id, name, price, original_price, image, description, duration,
+                                     service_mode, sales, status, merchant_id,
+                                     create_time, update_time, create_user, update_user)
+        values (#{categoryId}, #{name}, #{price}, #{originalPrice}, #{image}, #{description}, #{duration},
+                #{serviceMode}, #{sales}, #{status}, #{merchantId},
+                #{createTime}, #{updateTime}, #{createUser}, #{updateUser})
+    </insert>
+
+    <update id="update" parameterType="ServicePackage">
+        update service_package
+        <set>
+            <if test="categoryId != null">category_id = #{categoryId},</if>
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="price != null">price = #{price},</if>
+            <if test="originalPrice != null">original_price = #{originalPrice},</if>
+            <if test="image != null and image != ''">image = #{image},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="duration != null">duration = #{duration},</if>
+            <if test="serviceMode != null">service_mode = #{serviceMode},</if>
+            <if test="sales != null">sales = #{sales},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="updateUser != null">update_user = #{updateUser},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteByIds">
+        delete from service_package where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="pageQuery" resultType="com.sky.vo.ServicePackageVO">
+        select sp.*, c.name as categoryName
+        from service_package sp
+        left outer join category c on sp.category_id = c.id
+        <where>
+            <if test="name != null and name != ''">
+                and sp.name like concat('%', #{name}, '%')
+            </if>
+            <if test="categoryId != null">
+                and sp.category_id = #{categoryId}
+            </if>
+            <if test="status != null">
+                and sp.status = #{status}
+            </if>
+        </where>
+        order by sp.create_time desc
+    </select>
+
+    <select id="list" parameterType="ServicePackage" resultType="ServicePackage">
+        select * from service_package
+        <where>
+            <if test="name != null and name != ''">
+                and name like concat('%', #{name}, '%')
+            </if>
+            <if test="categoryId != null">
+                and category_id = #{categoryId}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="serviceMode != null">
+                and service_mode = #{serviceMode}
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+    <select id="countByMap" resultType="java.lang.Integer">
+        select count(id) from service_package
+        <where>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="categoryId != null">
+                and category_id = #{categoryId}
+            </if>
+        </where>
+    </select>
+
+</mapper>

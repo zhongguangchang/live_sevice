@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ServiceOrderMapper">
+
+    <insert id="insert" parameterType="ServiceOrder" useGeneratedKeys="true" keyProperty="id">
+        insert into service_order (number, status, user_id, address_book_id, provider_id, slot_id,
+                                   service_mode, service_time, service_duration,
+                                   amount, pay_method, pay_status, order_time, checkout_time,
+                                   user_name, consignee, phone, address, remark,
+                                   verify_code, verify_time,
+                                   dispatch_time, accept_time, start_time, finish_time,
+                                   cancel_reason, rejection_reason, cancel_time, merchant_id)
+        values (#{number}, #{status}, #{userId}, #{addressBookId}, #{providerId}, #{slotId},
+                #{serviceMode}, #{serviceTime}, #{serviceDuration},
+                #{amount}, #{payMethod}, #{payStatus}, #{orderTime}, #{checkoutTime},
+                #{userName}, #{consignee}, #{phone}, #{address}, #{remark},
+                #{verifyCode}, #{verifyTime},
+                #{dispatchTime}, #{acceptTime}, #{startTime}, #{finishTime},
+                #{cancelReason}, #{rejectionReason}, #{cancelTime}, #{merchantId})
+    </insert>
+
+    <update id="update" parameterType="ServiceOrder">
+        update service_order
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="providerId != null">provider_id = #{providerId},</if>
+            <if test="payMethod != null">pay_method = #{payMethod},</if>
+            <if test="payStatus != null">pay_status = #{payStatus},</if>
+            <if test="checkoutTime != null">checkout_time = #{checkoutTime},</if>
+            <if test="verifyCode != null">verify_code = #{verifyCode},</if>
+            <if test="verifyTime != null">verify_time = #{verifyTime},</if>
+            <if test="dispatchTime != null">dispatch_time = #{dispatchTime},</if>
+            <if test="acceptTime != null">accept_time = #{acceptTime},</if>
+            <if test="startTime != null">start_time = #{startTime},</if>
+            <if test="finishTime != null">finish_time = #{finishTime},</if>
+            <if test="cancelReason != null and cancelReason != ''">cancel_reason = #{cancelReason},</if>
+            <if test="rejectionReason != null and rejectionReason != ''">rejection_reason = #{rejectionReason},</if>
+            <if test="cancelTime != null">cancel_time = #{cancelTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <!--
+      幂等核心：带前置状态校验的状态更新。
+      where 里的 status = #{expectStatus} 就是 CAS 的判据 ——
+      只有订单确实还处于预期状态，更新才会生效。
+      影响行数为 0 说明已经被别的线程/重复消息处理过了，
+      调用方据此跳过后续动作（比如回补 Redis 名额）。
+    -->
+    <update id="updateStatusIfMatch">
+        update service_order
+        <set>
+            status = #{order.status},
+            <if test="order.payStatus != null">pay_status = #{order.payStatus},</if>
+            <if test="order.payMethod != null">pay_method = #{order.payMethod},</if>
+            <if test="order.providerId != null">provider_id = #{order.providerId},</if>
+            <if test="order.checkoutTime != null">checkout_time = #{order.checkoutTime},</if>
+            <if test="order.verifyTime != null">verify_time = #{order.verifyTime},</if>
+            <if test="order.dispatchTime != null">dispatch_time = #{order.dispatchTime},</if>
+            <if test="order.acceptTime != null">accept_time = #{order.acceptTime},</if>
+            <if test="order.startTime != null">start_time = #{order.startTime},</if>
+            <if test="order.finishTime != null">finish_time = #{order.finishTime},</if>
+            <if test="order.cancelReason != null and order.cancelReason != ''">
+                cancel_reason = #{order.cancelReason},
+            </if>
+            <if test="order.rejectionReason != null and order.rejectionReason != ''">
+                rejection_reason = #{order.rejectionReason},
+            </if>
+            <if test="order.cancelTime != null">cancel_time = #{order.cancelTime},</if>
+        </set>
+        where id = #{order.id} and status = #{expectStatus}
+    </update>
+
+    <select id="pageQuery" parameterType="com.sky.dto.ServiceOrderPageQueryDTO"
+            resultType="ServiceOrder">
+        select * from service_order
+        <where>
+            <if test="number != null and number != ''">
+                and number = #{number}
+            </if>
+            <if test="phone != null and phone != ''">
+                and phone like concat('%', #{phone}, '%')
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="providerId != null">
+                and provider_id = #{providerId}
+            </if>
+            <if test="userId != null">
+                and user_id = #{userId}
+            </if>
+            <if test="beginTime != null">
+                and order_time &gt;= #{beginTime}
+            </if>
+            <if test="endTime != null">
+                and order_time &lt;= #{endTime}
+            </if>
+        </where>
+        order by order_time desc
+    </select>
+
+    <select id="countByMap" resultType="java.lang.Integer">
+        select count(id) from service_order
+        <where>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="begin != null">
+                and order_time &gt;= #{begin}
+            </if>
+            <if test="end != null">
+                and order_time &lt;= #{end}
+            </if>
+        </where>
+    </select>
+
+    <select id="sumByMap" resultType="java.lang.Double">
+        select sum(amount) from service_order
+        <where>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="begin != null">
+                and order_time &gt;= #{begin}
+            </if>
+            <if test="end != null">
+                and order_time &lt;= #{end}
+            </if>
+        </where>
+    </select>
+
+    <!--
+      销量 Top N。
+      统计口径：只算「待评价」和「已完成」的订单 —— 服务确实做完了才算销量，
+      未付款、已取消的不计入。
+    -->
+    <select id="getServiceSalesTopN" resultType="java.util.Map">
+        select oi.name as name, sum(oi.number) as value
+        from service_order_item oi
+        inner join service_order o on oi.order_id = o.id
+        where o.status in (5, 6)
+          and o.order_time between #{begin} and #{end}
+        group by oi.name
+        order by value desc
+        limit #{limit}
+    </select>
+
+</mapper>

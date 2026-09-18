@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.SlotMapper">
+
+    <insert id="insertBatch">
+        insert into slot (provider_id, service_id, service_date, start_time, end_time,
+                          total_stock, booked_count, status, version, merchant_id, create_time, update_time)
+        values
+        <foreach collection="slots" item="slot" separator=",">
+            (#{slot.providerId}, #{slot.serviceId}, #{slot.serviceDate}, #{slot.startTime}, #{slot.endTime},
+             #{slot.totalStock}, #{slot.bookedCount}, #{slot.status}, #{slot.version}, #{slot.merchantId},
+             #{slot.createTime}, #{slot.updateTime})
+        </foreach>
+    </insert>
+
+    <!--
+      查询可预约时段（用户端下单页）。
+      联表带出师傅信息，让用户选时段时能看到是哪个师傅、评分多少。
+      注意 remainStock 不在这里算 —— 数据库的 booked_count 是权威层的值，
+      但此刻可能还没落账（用户下单只扣了 Redis）。真实的剩余名额
+      由 Service 层查 Redis 填充，见 SlotServiceImpl.fillRemainStock。
+    -->
+    <select id="listAvailable" parameterType="com.sky.dto.SlotQueryDTO"
+            resultType="com.sky.vo.SlotVO">
+        select s.*,
+               p.name   as providerName,
+               p.avatar as providerAvatar,
+               p.score  as providerScore
+        from slot s
+        inner join provider p on s.provider_id = p.id
+        where s.status = 1
+          and p.status = 1
+        <if test="serviceId != null">
+            and s.service_id = #{serviceId}
+        </if>
+        <if test="serviceDate != null">
+            and s.service_date = #{serviceDate}
+        </if>
+        <if test="providerId != null">
+            and s.provider_id = #{providerId}
+        </if>
+        order by s.start_time, p.score desc
+    </select>
+
+    <!-- 管理端排期查询，不过滤师傅状态（离职师傅的历史排期也要能查出来） -->
+    <select id="listByCondition" parameterType="com.sky.dto.SlotQueryDTO"
+            resultType="com.sky.vo.SlotVO">
+        select s.*,
+               p.name   as providerName,
+               p.avatar as providerAvatar,
+               p.score  as providerScore
+        from slot s
+        left join provider p on s.provider_id = p.id
+        <where>
+            <if test="serviceId != null">
+                and s.service_id = #{serviceId}
+            </if>
+            <if test="serviceDate != null">
+                and s.service_date = #{serviceDate}
+            </if>
+            <if test="providerId != null">
+                and s.provider_id = #{providerId}
+            </if>
+        </where>
+        order by s.service_date desc, s.start_time
+    </select>
+
+</mapper>

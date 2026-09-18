@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ServiceSpecMapper">
+
+    <!-- 编辑服务项目时先按 serviceId 全删、再批量插入，和原项目处理口味的思路一致 -->
+    <insert id="insertBatch" parameterType="list">
+        insert into service_spec (service_id, name, value, price_delta, sort)
+        values
+        <foreach collection="specs" item="spec" separator=",">
+            (#{spec.serviceId}, #{spec.name}, #{spec.value}, #{spec.priceDelta}, #{spec.sort})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByServiceIds">
+        delete from service_spec where service_id in
+        <foreach collection="serviceIds" item="serviceId" open="(" separator="," close=")">
+            #{serviceId}
+        </foreach>
+    </delete>
+
+    <!-- 批量查询规格，列表页用一次查询代替 N 次查询，避免 N+1 -->
+    <select id="listByServiceIds" resultType="ServiceSpec">
+        select * from service_spec where service_id in
+        <foreach collection="serviceIds" item="serviceId" open="(" separator="," close=")">
+            #{serviceId}
+        </foreach>
+        order by service_id, sort
+    </select>
+
+</mapper>

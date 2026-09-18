@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ServiceCartMapper">
+
+    <insert id="insert" parameterType="ServiceCart" useGeneratedKeys="true" keyProperty="id">
+        insert into shopping_cart (name, user_id, service_id, service_package_id, spec,
+                                   number, amount, image, create_time)
+        values (#{name}, #{userId}, #{serviceId}, #{servicePackageId}, #{spec},
+                #{number}, #{amount}, #{image}, #{createTime})
+    </insert>
+
+    <!--
+      动态条件查询。判断「同一用户是否已加过同一个服务」时，
+      会把 userId + serviceId/servicePackageId + spec 一起作为条件传进来，
+      因为同一服务的不同规格（比如 60 平和 120 平）是两条不同的清单项。
+    -->
+    <select id="list" parameterType="ServiceCart" resultType="ServiceCart">
+        select * from shopping_cart
+        <where>
+            <if test="userId != null">
+                and user_id = #{userId}
+            </if>
+            <if test="serviceId != null">
+                and service_id = #{serviceId}
+            </if>
+            <if test="servicePackageId != null">
+                and service_package_id = #{servicePackageId}
+            </if>
+            <if test="spec != null and spec != ''">
+                and spec = #{spec}
+            </if>
+        </where>
+        order by create_time
+    </select>
+
+</mapper>
