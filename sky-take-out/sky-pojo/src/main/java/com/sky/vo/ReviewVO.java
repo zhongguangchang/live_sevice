@@ -54,6 +54,14 @@ public class ReviewVO implements Serializable {
 
     private String content;
 
+    /**
+     * 原始图片串（数据库里是逗号分隔的字符串）
+     * <p>
+     * 这个字段是给 MyBatis 映射用的中间载体，Service 层会把它拆成
+     * imageList 再返回给前端，前端直接用数组即可。
+     */
+    private String images;
+
     //评价图片数组
     private List<String> imageList = new ArrayList<>();
 
