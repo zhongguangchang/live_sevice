@@ -92,7 +92,7 @@ export default class extends Vue {
         } else {
           this.$message.error((res && res.data && res.data.msg) || '密码修改失败')
         }
-      } catch (err: any) {
+      } catch (err) {
         this.$message.error('修改失败：' + (err && err.message ? err.message : err))
       }
     })
