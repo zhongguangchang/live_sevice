@@ -10,8 +10,8 @@ import com.sky.dto.CategoryPageQueryDTO;
 import com.sky.entity.Category;
 import com.sky.exception.DeletionNotAllowedException;
 import com.sky.mapper.CategoryMapper;
-import com.sky.mapper.DishMapper;
-import com.sky.mapper.SetmealMapper;
+import com.sky.mapper.ServiceItemMapper;
+import com.sky.mapper.ServicePackageMapper;
 import com.sky.result.PageResult;
 import com.sky.service.CategoryService;
 import lombok.extern.slf4j.Slf4j;
@@ -31,9 +31,9 @@ public class CategoryServiceImpl implements CategoryService {
     @Autowired
     private CategoryMapper categoryMapper;
     @Autowired
-    private DishMapper dishMapper;
+    private ServiceItemMapper serviceItemMapper;
     @Autowired
-    private SetmealMapper setmealMapper;
+    private ServicePackageMapper servicePackageMapper;
 
     /**
      * 新增分类
@@ -73,18 +73,16 @@ public class CategoryServiceImpl implements CategoryService {
      * @param id
      */
     public void deleteById(Long id) {
-        //查询当前分类是否关联了菜品，如果关联了就抛出业务异常
-        Integer count = dishMapper.countByCategoryId(id);
+        //查询当前分类下是否还有服务项目，有就不能删
+        Integer count = serviceItemMapper.countByCategoryId(id);
         if(count > 0){
-            //当前分类下有菜品，不能删除
-            throw new DeletionNotAllowedException(MessageConstant.CATEGORY_BE_RELATED_BY_DISH);
+            throw new DeletionNotAllowedException(MessageConstant.CATEGORY_BE_RELATED_BY_SERVICE_ITEM);
         }
 
-        //查询当前分类是否关联了套餐，如果关联了就抛出业务异常
-        count = setmealMapper.countByCategoryId(id);
+        //再查是否还有服务套餐
+        count = servicePackageMapper.countByCategoryId(id);
         if(count > 0){
-            //当前分类下有菜品，不能删除
-            throw new DeletionNotAllowedException(MessageConstant.CATEGORY_BE_RELATED_BY_SETMEAL);
+            throw new DeletionNotAllowedException(MessageConstant.CATEGORY_BE_RELATED_BY_SERVICE_PACKAGE);
         }
 
         //删除分类数据
