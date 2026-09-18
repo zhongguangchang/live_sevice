@@ -102,6 +102,18 @@ public interface ServiceOrderService {
     void verify(Long orderId, String verifyCode);
 
     /**
+     * 派单超时自动转派（供 MQ 消费者调用）
+     * <p>
+     * 本项目是「按师傅排班」模型，下单时师傅就已经定了，
+     * 所以这里处理的是「师傅 5 分钟没接单」的情况 —— 换一个人。
+     * 原师傅会被排除掉，避免转回同一个人。
+     *
+     * @param excludeProviderId 要排除的师傅，一般是原师傅
+     * @return true 表示确实转派了
+     */
+    boolean reassign(Long orderId, Long excludeProviderId);
+
+    /**
      * 各状态订单数量统计（管理端工作台用）
      */
     ServiceOrderStatisticsVO statistics();

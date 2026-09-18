@@ -1,6 +1,9 @@
 package com.sky.config;
 
 import com.sky.constant.MqConstant;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Binding;
@@ -48,10 +51,27 @@ public class RabbitMQConfiguration {
      * <p>
      * 注意：如果用 Java 原生序列化，消息体必须实现 Serializable；
      * 换成 JSON 之后就没有这个约束了。
+     * <p>
+     * <b>必须显式配置 ObjectMapper 并注册 JavaTimeModule。</b>
+     * 消息体 OrderMessageDTO 里有 LocalDateTime 字段（sendTime / serviceTime），
+     * 而 Jackson 默认不认识 java.time 包下的类型，
+     * 用 new Jackson2JsonMessageConverter() 直接构造会抛：
+     * <pre>
+     *   MessageConversionException: Failed to convert Message content
+     *   ... InvalidDefinitionException: Java 8 date/time type
+     *   java.time.LocalDateTime not supported by default
+     * </pre>
+     * 这个异常在生产者里被 catch 掉只打日志，流程照常继续，
+     * 所以从业务表面看不出来 —— 但消息实际上一条都没发出去。
      */
     @Bean
     public MessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+        ObjectMapper objectMapper = new ObjectMapper();
+        //支持 LocalDateTime / LocalDate / LocalTime
+        objectMapper.registerModule(new JavaTimeModule());
+        //时间序列化成 ISO 字符串而不是时间戳数组
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return new Jackson2JsonMessageConverter(objectMapper);
     }
 
     /**

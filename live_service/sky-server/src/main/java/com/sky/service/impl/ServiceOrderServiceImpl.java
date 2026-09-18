@@ -241,6 +241,9 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
         orderMessageProducer.sendServiceRemind(
                 order.getId(), order.getUserId(), order.getProviderId(), order.getServiceTime());
 
+        // 订单进入待接单，师傅需要在 5 分钟内接单，超时自动转派给其他人
+        orderMessageProducer.sendDispatchTimeout(order.getId(), order.getProviderId());
+
         log.info("支付成功：number={}, 订单进入待接单", orderNumber);
     }
 
@@ -347,6 +350,48 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
     }
 
     @Override
+    @Transactional
+    public boolean reassign(Long orderId, Long excludeProviderId) {
+        ServiceOrder order = serviceOrderMapper.getById(orderId);
+        if (order == null) {
+            log.info("订单不存在，跳过转派：orderId={}", orderId);
+            return false;
+        }
+        // 只在「待接单」状态下转派。已经接单、已取消、已完成的都不用管
+        if (!ServiceOrder.TO_BE_ACCEPTED.equals(order.getStatus())) {
+            log.info("订单已不是待接单状态（当前 {}），跳过转派：orderId={}",
+                    order.getStatus(), orderId);
+            return false;
+        }
+
+        Long newProviderId;
+        try {
+            newProviderId = autoSelectProvider(order, excludeProviderId);
+        } catch (Exception e) {
+            // 没有可接单的师傅不算异常：订单留在待接单里等人工处理
+            log.warn("没有找到可转派的师傅，订单继续等待人工派单：orderId={}", orderId);
+            return false;
+        }
+
+        ServiceOrder update = ServiceOrder.builder()
+                .id(orderId)
+                .status(ServiceOrder.TO_BE_ACCEPTED)
+                .providerId(newProviderId)
+                .dispatchTime(LocalDateTime.now())
+                .build();
+        int rows = serviceOrderMapper.updateStatusIfMatch(update, ServiceOrder.TO_BE_ACCEPTED);
+        if (rows == 0) {
+            return false;
+        }
+
+        // 新师傅同样只有 5 分钟，超时继续往下转
+        orderMessageProducer.sendDispatchTimeout(orderId, newProviderId);
+        log.info("派单超时已转派：orderId={}, 原师傅={}, 新师傅={}",
+                orderId, excludeProviderId, newProviderId);
+        return true;
+    }
+
+    @Override
     public ServiceOrderStatisticsVO statistics() {
         return ServiceOrderStatisticsVO.builder()
                 .toBeAccepted(serviceOrderMapper.countByStatus(ServiceOrder.TO_BE_ACCEPTED))
@@ -371,9 +416,7 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
             throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
         }
 
-        Long providerId = dto.getProviderId() != null
-                ? dto.getProviderId()
-                : autoSelectProvider(order);
+        Long providerId = resolveProvider(order, dto.getProviderId());
 
         ServiceOrder update = ServiceOrder.builder()
                 .id(order.getId())
@@ -516,6 +559,35 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
     // ========================================================================
 
     /**
+     * 决定这一单派给谁
+     * <p>
+     * 优先级：
+     * <ol>
+     *   <li>管理端明确指定了师傅 —— 用指定的，这是「改派」场景</li>
+     *   <li>订单本身已经带了师傅 —— 保持不动</li>
+     *   <li>以上都没有 —— 走自动派单算法</li>
+     * </ol>
+     * <p>
+     * <b>第 2 条是关键。</b>本项目是「按师傅排班」的模型：
+     * 用户在小程序里选时段时，选中的 slot 本身就有 provider_id，
+     * 也就是说下单那一刻师傅就已经定了。
+     * <p>
+     * 如果这里再跑一遍算法按评分重新挑人，会出两个问题：
+     * 被占用的时段属于 A，订单却派给了 B —— A 的档期被占着却不用干活；
+     * 而 B 可能在自己的同时段还有别的单，档期冲突。
+     */
+    private Long resolveProvider(ServiceOrder order, Long assignedProviderId) {
+        if (assignedProviderId != null) {
+            return assignedProviderId;
+        }
+        if (order.getProviderId() != null) {
+            return order.getProviderId();
+        }
+        // 没有排期归属的订单（到店服务、临时加单）才需要算法挑人
+        return autoSelectProvider(order, null);
+    }
+
+    /**
      * 自动派单算法
      * <pre>
      *   1. 技能过滤：只挑掌握了该服务所属分类的师傅
@@ -526,8 +598,10 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
      * </pre>
      * 第 1~3 步合并成一条 SQL（ProviderMapper.listAvailableByCategoryId），
      * 第 4 步必须放在 Java 里做，因为它要逐人查订单表，属于行级判断。
+     *
+     * @param excludeProviderId 需要排除的师傅（转派时排除原师傅），可为 null
      */
-    private Long autoSelectProvider(ServiceOrder order) {
+    private Long autoSelectProvider(ServiceOrder order, Long excludeProviderId) {
         List<ServiceOrderItem> items = serviceOrderItemMapper.listByOrderId(order.getId());
         if (items.isEmpty()) {
             throw new OrderBusinessException("订单没有服务明细，无法派单");
@@ -543,6 +617,9 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
 
         List<Provider> candidates = providerMapper.listAvailableByCategoryId(item.getCategoryId());
         for (Provider candidate : candidates) {
+            if (candidate.getId().equals(excludeProviderId)) {
+                continue;
+            }
             Integer busy = serviceOrderMapper.countProviderBusy(candidate.getId(), order.getSlotId());
             if (busy == null || busy == 0) {
                 return candidate.getId();
@@ -591,7 +668,13 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
     private String buildFullAddress(AddressBook address) {
         StringBuilder sb = new StringBuilder();
         appendIfPresent(sb, address.getProvinceName());
-        appendIfPresent(sb, address.getCityName());
+        // 直辖市（北京/上海/天津/重庆）的省名和市名是同一个词，
+        // 直接拼会出现「北京市北京市海淀区…」，所以相同时跳过市名
+        String province = address.getProvinceName() == null ? "" : address.getProvinceName();
+        String city = address.getCityName() == null ? "" : address.getCityName();
+        if (!city.equals(province)) {
+            appendIfPresent(sb, city);
+        }
         appendIfPresent(sb, address.getDistrictName());
         appendIfPresent(sb, address.getDetail());
         return sb.toString();

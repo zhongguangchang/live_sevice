@@ -1,6 +1,7 @@
 package com.sky.dto;
 
 import lombok.Data;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -33,8 +34,10 @@ public class ServiceOrderPageQueryDTO implements Serializable {
     private Long userId;
 
     //下单开始时间
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime beginTime;
 
     //下单结束时间
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime endTime;
 }

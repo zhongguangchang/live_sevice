@@ -3,6 +3,7 @@ package com.sky.controller.admin;
 import com.sky.dto.ServiceOrderCancelDTO;
 import com.sky.dto.ServiceOrderDispatchDTO;
 import com.sky.dto.ServiceOrderPageQueryDTO;
+import com.sky.dto.ServiceOrderRejectionDTO;
 import com.sky.result.PageResult;
 import com.sky.result.Result;
 import com.sky.service.ServiceOrderService;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -75,6 +77,58 @@ public class ServiceOrderController {
     public Result complete(@PathVariable Long id) {
         log.info("完成订单：id={}", id);
         serviceOrderService.completeService(id, null);
+        return Result.success();
+    }
+
+    /**
+     * 接单
+     * <p>
+     * 正常场景是师傅在自己的端上接单，这里放在管理端有两个用途：
+     * 一是演示时不用真的开一个师傅端就能走通全流程，
+     * 二是师傅长时间联系不上时运营可以代接单兜底。
+     * 订单的 provider_id 在派单时已经写好了，这里不用再传。
+     */
+    @PutMapping("/accept/{id}")
+    @ApiOperation("接单")
+    public Result accept(@PathVariable Long id) {
+        log.info("接单：orderId={}", id);
+        serviceOrderService.accept(id, null);
+        return Result.success();
+    }
+
+    /**
+     * 拒单。订单会退回「待接单」状态，由运营重新派单
+     */
+    @PutMapping("/rejection")
+    @ApiOperation("拒单")
+    public Result rejection(@RequestBody ServiceOrderRejectionDTO serviceOrderRejectionDTO) {
+        log.info("拒单：{}", serviceOrderRejectionDTO);
+        serviceOrderService.reject(serviceOrderRejectionDTO);
+        return Result.success();
+    }
+
+    /**
+     * 师傅到达现场，开始服务
+     */
+    @PutMapping("/start/{id}")
+    @ApiOperation("开始服务")
+    public Result startService(@PathVariable Long id) {
+        log.info("开始服务：orderId={}", id);
+        serviceOrderService.startService(id, null);
+        return Result.success();
+    }
+
+    /**
+     * 到店服务的核销
+     * <p>
+     * 用户到店后出示订单里的 6 位核销码，门店或师傅核对后在这里核销，
+     * 核销即视为服务开始。
+     */
+    @PutMapping("/verify")
+    @ApiOperation("到店核销")
+    public Result verify(@RequestParam Long orderId, @RequestParam String verifyCode) {
+        log.info("到店核销：orderId={}", orderId);
+        serviceOrderService.verify(orderId, verifyCode);
         return Result.success();
     }
 }
