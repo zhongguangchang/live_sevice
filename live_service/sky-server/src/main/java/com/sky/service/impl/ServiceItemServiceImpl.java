@@ -45,12 +45,49 @@ public class ServiceItemServiceImpl implements ServiceItemService {
     public void saveWithSpecs(ServiceItemDTO dto) {
         ServiceItem item = new ServiceItem();
         BeanUtils.copyProperties(dto, item);
-        // 新增时销量和评分给默认值，避免统计页面出现 null
-        item.setSales(0);
-        item.setMerchantId(1L);
+        applyInsertDefaults(item);
 
         serviceItemMapper.insert(item);
         saveSpecs(item.getId(), dto.getSpecs());
+    }
+
+    /**
+     * 补齐新增时的默认值
+     * <p>
+     * <b>为什么不能依赖数据库的 DEFAULT：</b>这些列在 DDL 里确实写了默认值，
+     * 但 MyBatis 的 insert 语句是固定列清单，未传的字段会显式插入 NULL，
+     * 而「显式 NULL」不会触发默认值，MySQL 直接报
+     * {@code Column 'score' cannot be null}。
+     * <p>
+     * 结果就是管理端点「新增服务项目」必然失败——这是改造过程中真实存在的问题，
+     * 因为默认值只在服务层补了 sales 和 merchantId，漏掉了 score。
+     * <p>
+     * 取值对齐 DDL 里的默认值：单位空串、时长 60 分钟、上门服务、
+     * 需要预约、销量 0、评分 5.00（新项目先给满分，之后由评价回写覆盖）。
+     */
+    private void applyInsertDefaults(ServiceItem item) {
+        if (item.getUnit() == null) {
+            item.setUnit("");
+        }
+        if (item.getDuration() == null) {
+            item.setDuration(60);
+        }
+        if (item.getServiceMode() == null) {
+            item.setServiceMode(ServiceItem.MODE_HOME);
+        }
+        if (item.getNeedAppoint() == null) {
+            item.setNeedAppoint(1);
+        }
+        if (item.getSales() == null) {
+            item.setSales(0);
+        }
+        if (item.getScore() == null) {
+            item.setScore(new java.math.BigDecimal("5.00"));
+        }
+        if (item.getStatus() == null) {
+            item.setStatus(StatusConstant.DISABLE);
+        }
+        item.setMerchantId(1L);
     }
 
     @Override

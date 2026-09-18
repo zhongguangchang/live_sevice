@@ -47,11 +47,33 @@ public class ServicePackageServiceImpl implements ServicePackageService {
     public void saveWithItems(ServicePackageDTO dto) {
         ServicePackage pkg = new ServicePackage();
         BeanUtils.copyProperties(dto, pkg);
-        pkg.setSales(0);
-        pkg.setMerchantId(1L);
+        applyInsertDefaults(pkg);
         servicePackageMapper.insert(pkg);
 
         saveItems(pkg.getId(), dto.getItems());
+    }
+
+    /**
+     * 补齐新增套餐的默认值
+     * <p>
+     * duration / serviceMode / sales / status 都是 NOT NULL 列，
+     * 前端没填时 BeanUtils 拷过来就是 null，insert 会带上显式 NULL，
+     * 数据库默认值不生效直接报错（同 ServiceItemServiceImpl 里的说明）。
+     */
+    private void applyInsertDefaults(ServicePackage pkg) {
+        if (pkg.getDuration() == null) {
+            pkg.setDuration(60);
+        }
+        if (pkg.getServiceMode() == null) {
+            pkg.setServiceMode(ServiceItem.MODE_HOME);
+        }
+        if (pkg.getSales() == null) {
+            pkg.setSales(0);
+        }
+        if (pkg.getStatus() == null) {
+            pkg.setStatus(StatusConstant.DISABLE);
+        }
+        pkg.setMerchantId(1L);
     }
 
     @Override

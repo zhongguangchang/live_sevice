@@ -398,6 +398,7 @@ CREATE TABLE IF NOT EXISTS `service_order`
     `verify_time`     DATETIME                DEFAULT NULL COMMENT '核销时间',
 
     -- 服务过程时间戳（用于计算响应速度、服务时长统计）
+    `dispatch_count`  TINYINT        NOT NULL DEFAULT 0 COMMENT '派单次数（含自动转派）。超过 3 次就停止自动转派、转人工处理，避免订单每 5 分钟无限换人',
     `dispatch_time`   DATETIME                DEFAULT NULL COMMENT '派单时间',
     `accept_time`     DATETIME                DEFAULT NULL COMMENT '师傅接单时间',
     `start_time`      DATETIME                DEFAULT NULL COMMENT '开始服务时间',

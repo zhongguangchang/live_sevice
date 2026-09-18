@@ -81,6 +81,13 @@ public class EmployeeServiceImpl implements EmployeeService {
         //设置账号的状态，默认正常状态 1表示正常 0表示锁定
         employee.setStatus(StatusConstant.ENABLE);
 
+        // 角色默认「派单员」（和数据库默认值、前端默认选项保持一致）。
+        // role 是 NOT NULL 列，前端漏传时 MyBatis 会写显式 NULL，
+        // 数据库默认值不生效，新增员工会直接 500
+        if (employee.getRole() == null) {
+            employee.setRole(3);
+        }
+
         //设置密码，默认密码123456
         employee.setPassword(DigestUtils.md5DigestAsHex(PasswordConstant.DEFAULT_PASSWORD.getBytes()));
 

@@ -204,7 +204,7 @@ export default class extends Vue {
           dangerouslyUseHTMLString: true,
           onClick: () => {
             that.$router
-              .push(`/order?orderId=${jsonMsg.orderId}`)
+              .push(`/serviceOrder?orderId=${jsonMsg.orderId}`)
               .catch((err) => {
                 console.log(err)
               })

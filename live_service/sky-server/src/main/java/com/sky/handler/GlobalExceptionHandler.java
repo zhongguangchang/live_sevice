@@ -36,6 +36,10 @@ public class GlobalExceptionHandler {
     public Result exceptionHandler(SQLIntegrityConstraintViolationException ex){
         //Duplicate entry 'zhangsan' for key 'employee.idx_username'
         String message = ex.getMessage();
+        // 这里必须把异常本身打出来，而不只是返回一句「未知错误」。
+        // 之前的实现只有 return，日志里什么都看不到，
+        // 出了约束冲突根本不知道是哪张表、哪个字段、哪个值
+        log.error("SQL 约束冲突：{}", message, ex);
         if(message.contains("Duplicate entry")){
             String[] split = message.split(" ");
             String username = split[2];
@@ -44,5 +48,19 @@ public class GlobalExceptionHandler {
         }else{
             return Result.error(MessageConstant.UNKNOWN_ERROR);
         }
+    }
+
+    /**
+     * 兜底：其它未预料到的异常
+     * <p>
+     * 没有这个处理器时，非业务异常会走 Spring Boot 默认的错误页/错误结构，
+     * 前端拿到的返回体和其它接口不一致（不是 Result 结构），
+     * 排查时日志里也只剩一行「未知错误」。
+     * 这里统一收敛成 Result，并把完整堆栈写进日志。
+     */
+    @ExceptionHandler(Exception.class)
+    public Result exceptionHandler(Exception ex){
+        log.error("系统异常：{}", ex.getMessage(), ex);
+        return Result.error(MessageConstant.UNKNOWN_ERROR);
     }
 }

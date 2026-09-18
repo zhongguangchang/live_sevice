@@ -13,6 +13,12 @@ sky:
     access-key-id: your-access-key-id
     access-key-secret: your-access-key-secret
     bucket-name: your-bucket-name
+  # 没有阿里云 OSS 账号时的本地图片存储（见 LocalFileStore）。
+  # 上传接口会判断 alioss 是否填了真实值：填了就传 OSS，还是占位符就存这里。
+  # 目录刻意放在 D 盘，避免把系统盘塞满
+  local-upload:
+    dir: D:/temp/life-service-uploads
+    url-prefix: http://localhost:8081/uploads/
   redis:
     # Redis 部署在 Linux 虚拟机上
     host: 192.168.229.129

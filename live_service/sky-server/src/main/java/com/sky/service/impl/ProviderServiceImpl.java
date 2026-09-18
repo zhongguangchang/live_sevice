@@ -4,6 +4,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.sky.dto.ProviderDTO;
 import com.sky.dto.ProviderPageQueryDTO;
+import com.sky.constant.StatusConstant;
 import com.sky.entity.Category;
 import com.sky.entity.Provider;
 import com.sky.entity.ProviderSkill;
@@ -43,9 +44,42 @@ public class ProviderServiceImpl implements ProviderService {
     public void saveWithSkills(ProviderDTO dto) {
         Provider provider = new Provider();
         BeanUtils.copyProperties(dto, provider);
+        applyInsertDefaults(provider);
         provider.setMerchantId(1L);
         providerMapper.insert(provider);
         saveSkills(provider.getId(), dto.getCategoryIds());
+    }
+
+    /**
+     * 补齐新增服务人员的默认值
+     * <p>
+     * score / good_rate / order_count / work_years / service_mode / status
+     * 都是 NOT NULL 列，DTO 里没传时是 null，insert 会写显式 NULL，
+     * 数据库默认值不生效，直接报 Column 'score' cannot be null。
+     * <p>
+     * 评分默认给 5.00、好评率 100：派单算法是按「评分高的优先」排序的，
+     * 新师傅如果是 0 分，永远排在有评价的师傅后面，接不到单。
+     * 等收到第一批评价后会被回写覆盖。
+     */
+    private void applyInsertDefaults(Provider provider) {
+        if (provider.getWorkYears() == null) {
+            provider.setWorkYears(0);
+        }
+        if (provider.getServiceMode() == null) {
+            provider.setServiceMode(1);
+        }
+        if (provider.getStatus() == null) {
+            provider.setStatus(StatusConstant.DISABLE);
+        }
+        if (provider.getScore() == null) {
+            provider.setScore(new java.math.BigDecimal("5.00"));
+        }
+        if (provider.getGoodRate() == null) {
+            provider.setGoodRate(new java.math.BigDecimal("100.00"));
+        }
+        if (provider.getOrderCount() == null) {
+            provider.setOrderCount(0);
+        }
     }
 
     @Override

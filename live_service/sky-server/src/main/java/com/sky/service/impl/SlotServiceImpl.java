@@ -219,11 +219,7 @@ public class SlotServiceImpl implements SlotService {
                 // 已经过了追溯期的排期没必要占 Redis 内存
                 continue;
             }
-            int remain = Math.max(0, slot.getTotalStock() - slot.getBookedCount());
-            stringRedisTemplate.opsForValue().set(
-                    RedisKeyConstant.slotStockKey(slot.getId()),
-                    String.valueOf(remain),
-                    Duration.ofSeconds(ttl));
+            rebuildSlotCache(slot, ttl);
             count++;
         }
         log.info("排期缓存预热完成：{} ~ {}，共 {} 个时段", begin, end, count);
@@ -231,19 +227,47 @@ public class SlotServiceImpl implements SlotService {
     }
 
     /**
+     * 用数据库的权威数据重建某个时段的 Redis 缓存（库存 + 用户占用集合）
+     * <p>
+     * <b>为什么用户集合必须一起重建：</b>原来的预热只 set 了库存 key。
+     * 库存被重置回「满」之后，之前预扣过的用户仍然留在
+     * slot:users:{slotId} 里，于是出现这种自相矛盾的状态：
+     * 页面显示还有名额，用户下单却收到「你已预约该时段」，
+     * 而且这个状态要等 7 天 TTL 到期才会自己消失。
+     * <p>
+     * 重建规则（和定时对账保持同一套推导）：
+     * <pre>
+     *   pending（已预扣未付款）= MySQL 里该时段状态为「待付款」的订单用户数
+     *   剩余名额 = total_stock - booked_count - pending
+     * </pre>
+     */
+    private void rebuildSlotCache(Slot slot, long ttl) {
+        List<Long> pendingUsers = slotMapper.listPendingUserIds(slot.getId());
+        int pending = pendingUsers == null ? 0 : pendingUsers.size();
+        int remain = Math.max(0, slot.getTotalStock() - slot.getBookedCount() - pending);
+
+        stringRedisTemplate.opsForValue()
+                .set(RedisKeyConstant.slotStockKey(slot.getId()),
+                        String.valueOf(remain), Duration.ofSeconds(ttl));
+
+        applyUserSet(slot, ttl, pendingUsers);
+    }
+
+    /**
      * 对账：以 MySQL 为权威，修正 Redis 里的库存
      * <p>
-     * 推导过程：设 Redis 用户集合大小为 holds，MySQL 已落账数为 committed。
-     * 已付款的用户既在集合里、也被计入了 committed，所以
+     * 推导过程（全部以 MySQL 为准，不信 Redis 里的用户集合）：
      * <pre>
-     *   pending（已预扣未付款）= holds - committed
+     *   committed（已落账）= slot.booked_count
+     *   pending（已预扣未付款）= 该时段状态为「待付款」的订单用户数
      *   理论剩余名额 = total_stock - committed - pending
      * </pre>
      * 拿这个理论值和 Redis 里的实际值比对，不一致就修正。
      * <p>
-     * 如果库存 key 整个消失了（Redis 重启或过期），说明丢失的
-     * 都是「已预扣但没付款」的占用，直接按
-     * {@code total_stock - committed} 重建是安全的。
+     * <b>为什么 pending 不再用「Redis 集合大小 - booked_count」：</b>
+     * 集合里除了待付款的用户，还留着已下单成功的用户（订单已完成、
+     * 集合还没到 TTL），按集合大小算会把已完成的人也当成未付款占用，
+     * 于是库存被越修越少，最后有位置却卖不出去。
      */
     @Override
     public int reconcile() {
@@ -252,30 +276,27 @@ public class SlotServiceImpl implements SlotService {
 
         for (Slot slot : slots) {
             String stockKey = RedisKeyConstant.slotStockKey(slot.getId());
-            String usersKey = RedisKeyConstant.slotUsersKey(slot.getId());
-
-            Long holds = stringRedisTemplate.opsForSet().size(usersKey);
-            int holdCount = holds == null ? 0 : holds.intValue();
-            int committed = slot.getBookedCount();
-            int pending = Math.max(0, holdCount - committed);
-            int expectedStock = Math.max(0, slot.getTotalStock() - committed - pending);
-
             long ttl = ttlSeconds(slot);
             if (ttl <= 0) {
                 continue;
             }
 
+            int committed = slot.getBookedCount();
+            List<Long> pendingUsers = slotMapper.listPendingUserIds(slot.getId());
+            int pending = pendingUsers == null ? 0 : pendingUsers.size();
+            int expectedStock = Math.max(0, slot.getTotalStock() - committed - pending);
+
             String actual = stringRedisTemplate.opsForValue().get(stockKey);
             if (actual == null) {
-                // key 不存在：按「只有已落账的部分被占用」重建
-                int rebuild = Math.max(0, slot.getTotalStock() - committed);
-                stringRedisTemplate.opsForValue()
-                        .set(stockKey, String.valueOf(rebuild), Duration.ofSeconds(ttl));
+                // key 不存在（Redis 重启或过期）：连同用户集合一起重建
+                rebuildSlotCache(slot, ttl);
                 fixed++;
-                log.info("对账重建库存：slotId={}, 重建值={}", slot.getId(), rebuild);
+                log.info("对账重建库存：slotId={}, 重建值={}", slot.getId(), expectedStock);
             } else if (!String.valueOf(expectedStock).equals(actual)) {
                 stringRedisTemplate.opsForValue()
                         .set(stockKey, String.valueOf(expectedStock), Duration.ofSeconds(ttl));
+                // 库存被修正时用户集合也一起纠偏，两边必须是同一份事实
+                applyUserSet(slot, ttl, pendingUsers);
                 fixed++;
                 log.warn("对账修正库存：slotId={}, Redis原值={}, 修正为={}",
                         slot.getId(), actual, expectedStock);
@@ -321,11 +342,42 @@ public class SlotServiceImpl implements SlotService {
             return false;
         }
         int remain = Math.max(0, slot.getTotalStock() - slot.getBookedCount());
-        stringRedisTemplate.opsForValue().setIfAbsent(
+        Boolean loaded = stringRedisTemplate.opsForValue().setIfAbsent(
                 RedisKeyConstant.slotStockKey(slotId),
                 String.valueOf(remain),
                 Duration.ofSeconds(ttl));
+        if (Boolean.TRUE.equals(loaded)) {
+            // 这里刚把库存建出来，用户占用集合也必须一起恢复，
+            // 否则「待付款订单已经占着名额、集合里却没有这个用户」，
+            // 该用户就能对同一个时段重复下单
+            rebuildUserSet(slot, ttl);
+        }
         return true;
+    }
+
+    /**
+     * 只重建用户占用集合（库存 key 已经存在时用）
+     */
+    private void rebuildUserSet(Slot slot, long ttl) {
+        applyUserSet(slot, ttl, slotMapper.listPendingUserIds(slot.getId()));
+    }
+
+    /**
+     * 先清空再按数据库现状重建用户占用集合，
+     * 避免残留「已经取消 / 已经完成」的占用把用户挡住
+     */
+    private void applyUserSet(Slot slot, long ttl, List<Long> pendingUsers) {
+        String usersKey = RedisKeyConstant.slotUsersKey(slot.getId());
+        stringRedisTemplate.delete(usersKey);
+        if (pendingUsers == null || pendingUsers.isEmpty()) {
+            return;
+        }
+        String[] users = new String[pendingUsers.size()];
+        for (int i = 0; i < pendingUsers.size(); i++) {
+            users[i] = String.valueOf(pendingUsers.get(i));
+        }
+        stringRedisTemplate.opsForSet().add(usersKey, users);
+        stringRedisTemplate.expire(usersKey, Duration.ofSeconds(ttl));
     }
 
     /**

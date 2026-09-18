@@ -3,6 +3,7 @@ package com.sky.config;
 import com.sky.interceptor.JwtTokenAdminInterceptor;
 import com.sky.interceptor.JwtTokenUserInterceptor;
 import com.sky.json.JacksonObjectMapper;
+import com.sky.utils.LocalFileStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -47,6 +48,8 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
     private JwtTokenAdminInterceptor jwtTokenAdminInterceptor;
     @Autowired
     private JwtTokenUserInterceptor jwtTokenUserInterceptor;
+    @Autowired
+    private LocalFileStore localFileStore;
 
     /**
      * 注册自定义拦截器
@@ -116,6 +119,15 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
         log.info("开始设置静态资源映射...");
         registry.addResourceHandler("/doc.html").addResourceLocations("classpath:/META-INF/resources/");
         registry.addResourceHandler("/webjars/**").addResourceLocations("classpath:/META-INF/resources/webjars/");
+
+        // 本地存储的上传文件（见 LocalFileStore）。
+        // 没配阿里云 OSS 时，服务项目封面等图片就存在本机磁盘，
+        // 通过 /uploads/** 对外访问。注意这个路径不能加鉴权拦截，
+        // 否则前端 <img> 标签里加载图片会被 401
+        String uploadDir = localFileStore.getAbsoluteDir();
+        log.info("上传文件访问映射：/uploads/** -> file:{}/", uploadDir);
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:" + uploadDir + "/");
     }
 
     /**

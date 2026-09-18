@@ -102,9 +102,27 @@ public interface SlotMapper {
     /**
      * 对账用：查出未来仍有预约占用的排期，
      * 定时任务拿这些记录去比对 Redis 里的实际值
+     * <p>
+     * 两类都要捞出来：已经落账的（booked_count &gt; 0），
+     * 以及只被预扣、还没付款的（存在状态 1 的订单）。
+     * 漏掉后者的话，用户下单未付款这段时间的占用就没人校正了。
      */
-    @Select("select * from slot where service_date >= #{today} and booked_count > 0")
+    @Select("select * from slot s where s.service_date >= #{today} " +
+            "and (s.booked_count > 0 " +
+            "     or exists (select 1 from service_order o where o.slot_id = s.id and o.status = 1))")
     List<Slot> listForReconcile(LocalDate today);
+
+    /**
+     * 查某个时段上「已预扣但还没付款」的用户（订单状态 = 1 待付款）
+     * <p>
+     * 重建 Redis 缓存时要用它把用户占用集合一起恢复出来。
+     * 只重建库存、不管用户集合的话，之前预扣过的用户会被一直挡住
+     * （集合 TTL 是 7 天），而库存看上去又是满的 —— 用户看到「有名额」，
+     * 下单却被告知「你已预约该时段」，两头都对不上。
+     */
+    @Select("select distinct user_id from service_order " +
+            "where slot_id = #{slotId} and status = 1 and user_id is not null")
+    List<Long> listPendingUserIds(Long slotId);
 
     /**
      * 对账时以 MySQL 为准强制修正

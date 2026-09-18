@@ -26,6 +26,8 @@ node_modules/
 *.log
 logs/
 run.log*
+# 冒烟测试的输出结果（tools/smoke-test.ps1 跑完生成的报告）
+smoke-result*.txt
 *.tmp
 *.bak
 

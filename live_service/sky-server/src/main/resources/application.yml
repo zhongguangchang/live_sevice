@@ -85,6 +85,9 @@ sky:
     access-key-id: ${sky.alioss.access-key-id}
     access-key-secret: ${sky.alioss.access-key-secret}
     bucket-name: ${sky.alioss.bucket-name}
+  local-upload:
+    dir: ${sky.local-upload.dir}
+    url-prefix: ${sky.local-upload.url-prefix}
   wechat:
     appid: ${sky.wechat.appid}
     secret: ${sky.wechat.secret}

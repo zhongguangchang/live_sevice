@@ -139,6 +139,10 @@ public class ServiceOrder implements Serializable {
     //派单时间
     private LocalDateTime dispatchTime;
 
+    //派单次数（含自动转派）。超过 3 次就停止自动转派，转人工处理，
+    //避免订单每 5 分钟无限换人
+    private Integer dispatchCount;
+
     //师傅接单时间
     private LocalDateTime acceptTime;
 

@@ -9,14 +9,14 @@
                                    amount, pay_method, pay_status, order_time, checkout_time,
                                    user_name, consignee, phone, address, remark,
                                    verify_code, verify_time,
-                                   dispatch_time, accept_time, start_time, finish_time,
+                                   dispatch_count, dispatch_time, accept_time, start_time, finish_time,
                                    cancel_reason, rejection_reason, cancel_time, merchant_id)
         values (#{number}, #{status}, #{userId}, #{addressBookId}, #{providerId}, #{slotId},
                 #{serviceMode}, #{serviceTime}, #{serviceDuration},
                 #{amount}, #{payMethod}, #{payStatus}, #{orderTime}, #{checkoutTime},
                 #{userName}, #{consignee}, #{phone}, #{address}, #{remark},
                 #{verifyCode}, #{verifyTime},
-                #{dispatchTime}, #{acceptTime}, #{startTime}, #{finishTime},
+                #{dispatchCount}, #{dispatchTime}, #{acceptTime}, #{startTime}, #{finishTime},
                 #{cancelReason}, #{rejectionReason}, #{cancelTime}, #{merchantId})
     </insert>
 
@@ -59,6 +59,7 @@
             <if test="order.checkoutTime != null">checkout_time = #{order.checkoutTime},</if>
             <if test="order.verifyTime != null">verify_time = #{order.verifyTime},</if>
             <if test="order.dispatchTime != null">dispatch_time = #{order.dispatchTime},</if>
+            <if test="order.dispatchCount != null">dispatch_count = #{order.dispatchCount},</if>
             <if test="order.acceptTime != null">accept_time = #{order.acceptTime},</if>
             <if test="order.startTime != null">start_time = #{order.startTime},</if>
             <if test="order.finishTime != null">finish_time = #{order.finishTime},</if>

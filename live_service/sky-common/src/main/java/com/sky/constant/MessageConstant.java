@@ -40,5 +40,6 @@ public class MessageConstant {
     public static final String RATE_LIMIT_EXCEEDED = "操作过于频繁，请稍后再试";
     public static final String SERVICE_PACKAGE_ENABLE_FAILED = "套餐内包含已停售的服务项目，无法启用";
     public static final String NEW_PASSWORD_SAME_AS_OLD = "新密码不能与旧密码相同";
+    public static final String SHOP_CLOSED = "平台已打烊，暂时无法提交预约，请稍后再试";
 
 }

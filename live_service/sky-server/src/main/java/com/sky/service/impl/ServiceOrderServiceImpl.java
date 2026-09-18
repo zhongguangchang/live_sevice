@@ -32,10 +32,12 @@ import com.sky.mapper.SlotMapper;
 import com.sky.mq.producer.OrderMessageProducer;
 import com.sky.result.PageResult;
 import com.sky.service.ServiceOrderService;
+import com.sky.service.ShopService;
 import com.sky.service.SlotService;
 import com.sky.vo.ServiceOrderStatisticsVO;
 import com.sky.vo.ServiceOrderSubmitVO;
 import com.sky.vo.ServiceOrderVO;
+import com.sky.websocket.AdminNotifier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -61,6 +63,20 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
     private static final DateTimeFormatter ORDER_NO_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
+    /** 推送给管理端的提醒里展示预约时间的格式 */
+    private static final DateTimeFormatter NOTIFY_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("MM-dd HH:mm");
+
+    /**
+     * 自动转派次数上限
+     * <p>
+     * 不做限制的话，只要一直没人接单，订单就会每 5 分钟换一个师傅、
+     * 无限循环下去：日志被刷爆、师傅被反复打扰，
+     * 而用户永远等不到一个确定的结果。
+     * 超过这个次数就停下来等人工派单。
+     */
+    private static final int MAX_DISPATCH_COUNT = 3;
+
     @Autowired
     private ServiceOrderMapper serviceOrderMapper;
     @Autowired
@@ -81,6 +97,10 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
     private SlotService slotService;
     @Autowired
     private OrderMessageProducer orderMessageProducer;
+    @Autowired
+    private AdminNotifier adminNotifier;
+    @Autowired
+    private ShopService shopService;
 
     // ========================================================================
     //  下单
@@ -91,20 +111,28 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
     public ServiceOrderSubmitVO submitOrder(ServiceOrderSubmitDTO dto) {
         Long userId = BaseContext.getCurrentId();
 
-        // 1. 校验时段
+        // 1. 平台打烊期间不允许下单
+        //    管理端页面上写着「打烊后用户端无法提交订单」，
+        //    但原实现只在管理端存了个 Redis 状态、下单流程里根本没读，
+        //    等于这个开关是摆设——打烊了照样能下单
+        if (!ShopService.STATUS_OPEN.equals(shopService.getStatus())) {
+            throw new OrderBusinessException(MessageConstant.SHOP_CLOSED);
+        }
+
+        // 2. 校验时段
         Slot slot = slotMapper.getById(dto.getSlotId());
         if (slot == null || !Slot.STATUS_OPEN.equals(slot.getStatus())) {
             throw new SlotNotAvailableException(MessageConstant.SLOT_NOT_FOUND);
         }
 
-        // 2. 取服务清单
+        // 3. 取服务清单
         List<ServiceCart> cartItems = serviceCartMapper.list(
                 ServiceCart.builder().userId(userId).build());
         if (cartItems == null || cartItems.isEmpty()) {
             throw new OrderBusinessException(MessageConstant.SHOPPING_CART_IS_NULL);
         }
 
-        // 3. 上门服务要校验地址和服务区域
+        // 4. 上门服务要校验地址和服务区域
         AddressBook address = null;
         if (ServiceOrder.MODE_HOME.equals(dto.getServiceMode())) {
             if (dto.getAddressBookId() == null) {
@@ -114,7 +142,7 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
             checkServiceArea(address);
         }
 
-        // 4. 【核心】Redis Lua 原子预扣名额
+        // 5. 【核心】Redis Lua 原子预扣名额
         //    放在落库之前：抢不到名额就直接返回，不产生任何数据库写入
         slotService.preDeduct(slot.getId(), userId);
 
@@ -161,6 +189,7 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
                     .address(address == null ? null : buildFullAddress(address))
                     .remark(dto.getRemark())
                     .verifyCode(generateVerifyCode())
+                    .dispatchCount(0)
                     .merchantId(1L)
                     .build();
             serviceOrderMapper.insert(order);
@@ -173,7 +202,7 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
             // 下单成功后清单清空
             serviceCartMapper.deleteByUserId(userId);
 
-            // 5. 发 15 分钟延迟消息：到期仍待付款就自动取消
+            // 6. 发 15 分钟延迟消息：到期仍待付款就自动取消
             orderMessageProducer.sendOrderTimeout(
                     order.getId(), order.getNumber(), slot.getId(), userId);
 
@@ -243,6 +272,14 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
 
         // 订单进入待接单，师傅需要在 5 分钟内接单，超时自动转派给其他人
         orderMessageProducer.sendDispatchTimeout(order.getId(), order.getProviderId());
+
+        // 实时推送给管理端：新订单待接单，页面弹窗 + 提示音。
+        // 走 WebSocket 而不是让运营刷新列表，派单响应速度差很多
+        adminNotifier.newOrder(order.getId(), String.format(
+                "订单 %s 已支付，预约时间 %s，服务地址：%s，请及时派单",
+                order.getNumber(),
+                order.getServiceTime() == null ? "-" : NOTIFY_TIME_FORMAT.format(order.getServiceTime()),
+                order.getAddress() == null ? "到店服务" : order.getAddress()));
 
         log.info("支付成功：number={}, 订单进入待接单", orderNumber);
     }
@@ -364,6 +401,15 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
             return false;
         }
 
+        // 转派次数上限检查。没有这道限制的话，
+        // 只要一直没人接单，订单每 5 分钟就会换一个人、永远循环下去
+        int nextCount = (order.getDispatchCount() == null ? 0 : order.getDispatchCount()) + 1;
+        if (nextCount > MAX_DISPATCH_COUNT) {
+            log.warn("订单已自动转派 {} 次仍无人接单，停止自动转派，等待人工派单：orderId={}",
+                    MAX_DISPATCH_COUNT, orderId);
+            return false;
+        }
+
         Long newProviderId;
         try {
             newProviderId = autoSelectProvider(order, excludeProviderId);
@@ -377,6 +423,7 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
                 .id(orderId)
                 .status(ServiceOrder.TO_BE_ACCEPTED)
                 .providerId(newProviderId)
+                .dispatchCount(nextCount)
                 .dispatchTime(LocalDateTime.now())
                 .build();
         int rows = serviceOrderMapper.updateStatusIfMatch(update, ServiceOrder.TO_BE_ACCEPTED);
@@ -593,7 +640,7 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
      *   1. 技能过滤：只挑掌握了该服务所属分类的师傅
      *   2. 状态过滤：只挑当前可接单的
      *   3. 排序    ：评分高的优先、接单数少的优先（负担均衡）
-     *   4. 档期过滤：排除该时段已有订单在身的师傅
+     *   4. 档期过滤：排除该时间段已有订单在身的师傅（按时间重叠判断）
      *   5. 取第一个
      * </pre>
      * 第 1~3 步合并成一条 SQL（ProviderMapper.listAvailableByCategoryId），
@@ -616,16 +663,36 @@ public class ServiceOrderServiceImpl implements ServiceOrderService {
         }
 
         List<Provider> candidates = providerMapper.listAvailableByCategoryId(item.getCategoryId());
+
+        // 取订单所在时段的时间范围，用来做档期冲突判断。
+        // 到店服务等没有绑定时段的订单跳过这一层过滤。
+        Slot slot = order.getSlotId() == null ? null : slotMapper.getById(order.getSlotId());
+
         for (Provider candidate : candidates) {
             if (candidate.getId().equals(excludeProviderId)) {
                 continue;
             }
-            Integer busy = serviceOrderMapper.countProviderBusy(candidate.getId(), order.getSlotId());
-            if (busy == null || busy == 0) {
-                return candidate.getId();
+            if (slot != null && isProviderBusy(candidate.getId(), slot)) {
+                continue;
             }
+            return candidate.getId();
         }
         throw new ProviderNotAvailableException("当前时段没有可接单的服务人员");
+    }
+
+    /**
+     * 判断某师傅在目标时段是否已经有在身的订单
+     * <p>
+     * 判断依据是「时间区间是否重叠」，不是「slot 是否相同」：
+     * 一个 slot 只属于一个师傅，按 slot 判重等于没判，
+     * 订单会被派给那个时间段其实抽不开身的师傅。
+     *
+     * @see com.sky.mapper.ServiceOrderMapper#countProviderBusy
+     */
+    private boolean isProviderBusy(Long providerId, Slot slot) {
+        Integer busy = serviceOrderMapper.countProviderBusy(providerId,
+                slot.getServiceDate(), slot.getStartTime(), slot.getEndTime());
+        return busy != null && busy > 0;
     }
 
     /**
