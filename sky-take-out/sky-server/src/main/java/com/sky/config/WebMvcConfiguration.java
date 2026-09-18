@@ -69,9 +69,9 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
     public Docket docket1(){
         log.info("准备生成接口文档...");
         ApiInfo apiInfo = new ApiInfoBuilder()
-                .title("苍穹外卖项目接口文档")
+                .title("生活服务网接口文档")
                 .version("2.0")
-                .description("苍穹外卖项目接口文档")
+                .description("生活服务网接口文档")
                 .build();
 
         Docket docket = new Docket(DocumentationType.SWAGGER_2)
@@ -90,9 +90,9 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
     public Docket docket2(){
         log.info("准备生成接口文档...");
         ApiInfo apiInfo = new ApiInfoBuilder()
-                .title("苍穹外卖项目接口文档")
+                .title("生活服务网接口文档")
                 .version("2.0")
-                .description("苍穹外卖项目接口文档")
+                .description("生活服务网接口文档")
                 .build();
 
         Docket docket = new Docket(DocumentationType.SWAGGER_2)
