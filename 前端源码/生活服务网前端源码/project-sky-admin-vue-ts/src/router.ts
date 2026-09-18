@@ -140,7 +140,9 @@ const router = new Router({
             title: "员工管理",
             icon: "icon-employee"
           }
-        },
+        }
+      ]
+    },
     {
       path: "*",
       redirect: "/404",

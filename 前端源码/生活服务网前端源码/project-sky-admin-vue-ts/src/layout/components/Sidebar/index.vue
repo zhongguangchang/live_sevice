@@ -28,12 +28,14 @@
                :active-text-color="variables.menuActiveText"
                :unique-opened="false"
                :collapse-transition="false"
-               mode="vertical">
+               mode="vertical"
+        >
         <sidebar-item v-for="route in routes"
                       :key="route.path"
                       :item="route"
                       :base-path="route.path"
-                      :is-collapse="isCollapse" />
+                      :is-collapse="isCollapse"
+        />
         <!-- <div class="sub-menu">
           <div class="avatarName">
             {{ name }}

@@ -247,8 +247,6 @@ export default class extends Vue {
     })
     // this.$router.push(`/login?redirect=${this.$route.fullPath}`)
   }
-  // 获取未读消息
-  }
   // 营业状态
   async getStatus() {
     const { data } = await getStatus()
