@@ -9,6 +9,7 @@ import com.sky.context.BaseContext;
 import com.sky.dto.EmployeeDTO;
 import com.sky.dto.EmployeeLoginDTO;
 import com.sky.dto.EmployeePageQueryDTO;
+import com.sky.dto.PasswordEditDTO;
 import com.sky.entity.Employee;
 import com.sky.exception.AccountLockedException;
 import com.sky.exception.AccountNotFoundException;
@@ -159,5 +160,41 @@ public class EmployeeServiceImpl implements EmployeeService {
         //employee.setUpdateUser(BaseContext.getCurrentId());
 
         employeeMapper.update(employee);
+    }
+
+    /**
+     * 修改当前登录员工的密码
+     *
+     * @param passwordEditDTO
+     */
+    public void editPassword(PasswordEditDTO passwordEditDTO) {
+        // 员工 id 从登录态取，不接受前端传入 ——
+        // 否则拿到自己的 token 就能改别人的密码
+        Long empId = BaseContext.getCurrentId();
+
+        Employee employee = employeeMapper.getById(empId);
+        if (employee == null) {
+            throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);
+        }
+
+        // 校验旧密码。这一步不能省：万一 token 泄露，
+        // 有旧密码这道关至少挡住直接改密码
+        String oldPasswordMd5 = DigestUtils.md5DigestAsHex(
+                passwordEditDTO.getOldPassword().getBytes());
+        if (!oldPasswordMd5.equals(employee.getPassword())) {
+            throw new PasswordErrorException(MessageConstant.PASSWORD_ERROR);
+        }
+
+        String newPasswordMd5 = DigestUtils.md5DigestAsHex(
+                passwordEditDTO.getNewPassword().getBytes());
+        if (newPasswordMd5.equals(oldPasswordMd5)) {
+            throw new PasswordErrorException(MessageConstant.NEW_PASSWORD_SAME_AS_OLD);
+        }
+
+        Employee update = Employee.builder()
+                .id(empId)
+                .password(newPasswordMd5)
+                .build();
+        employeeMapper.update(update);
     }
 }

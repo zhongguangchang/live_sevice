@@ -39,5 +39,6 @@ public class MessageConstant {
     public static final String ORDER_NOT_COMPLETED = "订单尚未完成服务，不能评价";
     public static final String RATE_LIMIT_EXCEEDED = "操作过于频繁，请稍后再试";
     public static final String SERVICE_PACKAGE_ENABLE_FAILED = "套餐内包含已停售的服务项目，无法启用";
+    public static final String NEW_PASSWORD_SAME_AS_OLD = "新密码不能与旧密码相同";
 
 }

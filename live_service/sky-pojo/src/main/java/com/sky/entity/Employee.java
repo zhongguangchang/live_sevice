@@ -31,6 +31,11 @@ public class Employee implements Serializable {
 
     private String idNumber;
 
+    //角色 1超级管理员 2运营 3派单员
+    //生活服务网的业务链条比外卖长，需要区分职责：
+    //运营只管服务项目上架，派单员只管订单分配，超管才能建账号
+    private Integer role;
+
     private Integer status;
 
     //@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

@@ -73,16 +73,27 @@ export default class extends Vue {
   private affirmPassword = ''
   handleSave() {
     ;(this.$refs.form as ElForm).validate(async (valid: boolean) => {
-      if (valid) {
-        const parnt = {
-          oldPassword: this.form.oldPassword,
-          newPassword: this.form.newPassword,
-        }
-        await editPassword(parnt)
-        this.$emit('handleclose')
-        ;(this.$refs.form as ElForm).resetFields()
-      } else {
+      if (!valid) {
         return false
+      }
+      const params = {
+        oldPassword: this.form.oldPassword,
+        newPassword: this.form.newPassword,
+      }
+      try {
+        // 之前这里拿到响应就直接关闭弹窗，成功失败都看不出来。
+        // 后端会返回 code=0 + msg（比如「密码错误」「新密码不能与旧密码相同」），
+        // 所以要把两种情况都提示出来。
+        const res: any = await editPassword(params)
+        if (res && res.data && res.data.code === 1) {
+          this.$message.success('密码修改成功，请牢记新密码')
+          this.$emit('handleclose')
+          ;(this.$refs.form as ElForm).resetFields()
+        } else {
+          this.$message.error((res && res.data && res.data.msg) || '密码修改失败')
+        }
+      } catch (err: any) {
+        this.$message.error('修改失败：' + (err && err.message ? err.message : err))
       }
     })
   }

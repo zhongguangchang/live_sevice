@@ -19,4 +19,7 @@ public class EmployeeDTO implements Serializable {
 
     private String idNumber;
 
+    //角色 1超级管理员 2运营 3派单员
+    private Integer role;
+
 }
