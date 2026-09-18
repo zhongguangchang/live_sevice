@@ -1,207 +1,270 @@
 <template>
-  <div class="dashboard-container">
-    <div class="container">
-      <div class="tableBar">
-        <label style="margin-right: 5px">员工姓名：</label>
-        <el-input
-          v-model="input"
-          placeholder="请输入员工姓名"
-          style="width: 15%"
-          clearable
-          @clear="init"
-          @keyup.enter.native="initFun"
-        />
-        <el-button class="normal-btn continue" @click="init(true)"
-          >查询</el-button
-        >
-        <el-button
-          type="primary"
-          style="float: right"
-          @click="addEmployeeHandle('add')"
-        >
-          + 添加员工
-        </el-button>
-      </div>
-      <el-table
-        :data="tableData"
-        stripe
-        v-if="tableData.length"
-        class="tableBox"
-      >
-        <el-table-column prop="name" label="员工姓名" />
-        <el-table-column prop="username" label="账号" />
-        <el-table-column prop="phone" label="手机号" />
-        <el-table-column label="账号状态">
+  <div class="page-wrap">
+    <el-card shadow="never" class="search-card">
+      <el-form :inline="true" :model="query" size="small">
+        <el-form-item label="姓名">
+          <el-input v-model="query.name" placeholder="请输入姓名" clearable style="width: 180px" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+          <el-button type="primary" plain @click="handleAdd">+ 新增员工</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card shadow="never" class="table-card">
+      <el-table v-loading="loading" :data="tableData" border stripe size="small">
+        <el-table-column prop="username" label="登录账号" width="140" />
+        <el-table-column prop="name" label="姓名" width="110" />
+        <el-table-column prop="phone" label="手机号" width="130" />
+        <el-table-column label="性别" width="80">
+          <template slot-scope="scope">{{ scope.row.sex === '1' ? '男' : '女' }}</template>
+        </el-table-column>
+        <el-table-column label="角色" width="140">
           <template slot-scope="scope">
-            <div
-              class="tableColumn-status"
-              :class="{ 'stop-use': String(scope.row.status) === '0' }"
-            >
-              {{ String(scope.row.status) === '0' ? '禁用' : '启用' }}
-            </div>
+            <el-tag size="mini" :type="roleTagType(scope.row.role)">{{ roleText(scope.row.role) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="updateTime" label="最后操作时间" />
-        <el-table-column label="操作" width="160" align="center">
+        <el-table-column label="账号状态" width="110">
           <template slot-scope="scope">
-            <el-button
-              type="text"
-              size="small"
-              class="blueBug"
-              :class="{ 'disabled-text': scope.row.username === 'admin' }"
-              :disabled="scope.row.username === 'admin'"
-              @click="addEmployeeHandle(scope.row.id, scope.row.username)"
-            >
-              修改
+            <el-tag size="mini" :type="scope.row.status === 1 ? 'success' : 'danger'">
+              {{ scope.row.status === 1 ? '正常' : '已锁定' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="最后操作时间" width="170">
+          <template slot-scope="scope">{{ formatTime(scope.row.updateTime) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="190" fixed="right">
+          <template slot-scope="scope">
+            <el-button type="text" size="mini" @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button type="text" size="mini" @click="handleStatus(scope.row)">
+              {{ scope.row.status === 1 ? '锁定' : '启用' }}
             </el-button>
             <el-button
-              :disabled="scope.row.username === 'admin'"
+              v-if="scope.row.username !== 'admin'"
               type="text"
-              size="small"
-              class="non"
-              :class="{
-                'disabled-text': scope.row.username === 'admin',
-                blueBug: scope.row.status == '0',
-                delBut: scope.row.status != '0',
-              }"
-              @click="statusHandle(scope.row)"
-            >
-              {{ scope.row.status == '1' ? '禁用' : '启用' }}
-            </el-button>
+              size="mini"
+              class="danger-text"
+              @click="handleDelete(scope.row)"
+            >删除</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <Empty v-else :is-search="isSearch" />
+
       <el-pagination
-        class="pageList"
-        :page-sizes="[10, 20, 30, 40]"
-        :page-size="pageSize"
-        layout="total, sizes, prev, pager, next, jumper"
-        :total="counts"
+        class="pager"
+        background
+        :current-page="query.page"
+        :page-size="query.pageSize"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next"
+        :total="total"
+        @current-change="handlePageChange"
         @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
       />
-    </div>
+    </el-card>
+
+    <el-dialog :title="form.id ? '编辑员工' : '新增员工'" :visible.sync="dialogVisible" width="640px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" size="small">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="登录账号" prop="username">
+              <el-input v-model="form.username" :disabled="!!form.id" placeholder="用于登录后台" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="姓名" prop="name">
+              <el-input v-model="form.name" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="手机号" prop="phone">
+              <el-input v-model="form.phone" maxlength="11" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="性别">
+              <el-radio-group v-model="form.sex">
+                <el-radio label="1">男</el-radio>
+                <el-radio label="0">女</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="身份证号" prop="idNumber">
+          <el-input v-model="form.idNumber" maxlength="18" />
+        </el-form-item>
+
+        <el-form-item label="角色" prop="role">
+          <el-radio-group v-model="form.role">
+            <el-radio :label="1">超级管理员</el-radio>
+            <el-radio :label="2">运营</el-radio>
+            <el-radio :label="3">派单员</el-radio>
+          </el-radio-group>
+          <div class="tip">
+            超级管理员可管理账号；运营负责服务项目、套餐和评价；派单员只处理订单和派单
+          </div>
+        </el-form-item>
+
+        <el-alert
+          v-if="!form.id"
+          type="info"
+          :closable="false"
+          title="新增员工的初始密码为 123456，请提醒对方登录后尽快修改"
+          style="margin-bottom: 8px"
+        />
+      </el-form>
+      <div slot="footer">
+        <el-button @click="dialogVisible = false">取 消</el-button>
+        <el-button type="primary" @click="handleSubmit">确 定</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script lang="ts">
-import { Component, Vue } from 'vue-property-decorator'
-import HeadLable from '@/components/HeadLable/index.vue'
-import { getEmployeeList, enableOrDisableEmployee } from '@/api/employee'
-import { UserModule } from '@/store/modules/user'
-import InputAutoComplete from '@/components/InputAutoComplete/index.vue'
-import Empty from '@/components/Empty/index.vue'
+import Vue from 'vue'
+import { getEmployeeList, addEmployee, editEmployee, queryEmployeeById, enableOrDisableEmployee } from '@/api/employee'
 
-@Component({
+export default Vue.extend({
   name: 'Employee',
-  components: {
-    HeadLable,
-    InputAutoComplete,
-    Empty,
+
+  data() {
+    return {
+      query: { page: 1, pageSize: 10, name: '' },
+      total: 0,
+      tableData: [] as any[],
+      loading: false,
+      dialogVisible: false,
+      form: { id: null, username: '', name: '', phone: '', sex: '1', idNumber: '', role: 3 } as any,
+      rules: {
+        username: [{ required: true, message: '请输入登录账号', trigger: 'blur' }],
+        name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+        phone: [
+          { required: true, message: '请输入手机号', trigger: 'blur' },
+          { pattern: /^1\d{10}$/, message: '手机号格式不正确', trigger: 'blur' }
+        ],
+        role: [{ required: true, message: '请选择角色', trigger: 'change' }]
+      }
+    }
   },
-})
-export default class extends Vue {
-  private input: any = ''
-  private counts: number = 0
-  private page: number = 1
-  private pageSize: number = 10
-  private tableData = []
-  private id = ''
-  private status = ''
-  private isSearch: boolean = false
 
   created() {
-    this.init()
-  }
+    this.loadData()
+  },
 
-  initProp(val) {
-    this.input = val
-    this.initFun()
-  }
+  methods: {
+    roleText(role: any) {
+      return role === 1 ? '超级管理员' : role === 2 ? '运营' : role === 3 ? '派单员' : '-'
+    },
+    roleTagType(role: any) {
+      return role === 1 ? 'danger' : role === 2 ? '' : 'info'
+    },
+    formatTime(v: any) {
+      return v ? String(v).replace('T', ' ').slice(0, 16) : '-'
+    },
 
-  initFun() {
-    this.page = 1
-    this.init()
-  }
+    loadData() {
+      this.loading = true
+      const params: any = { page: this.query.page, pageSize: this.query.pageSize }
+      if (this.query.name) params.name = this.query.name
 
-  get userName() {
-    return UserModule.username
-  }
-
-  private async init(isSearch?: boolean) {
-    this.isSearch = isSearch
-    const params = {
-      page: this.page,
-      pageSize: this.pageSize,
-      name: this.input ? this.input : undefined,
-    }
-    await getEmployeeList(params)
-      .then((res: any) => {
-        if (String(res.data.code) === '1') {
-          this.tableData = res.data && res.data.data && res.data.data.records
-          this.counts = res.data.data.total
-        }
-        // if (!res.data.data.records.length && type === 'search') {
-        //   this.$message.error('未搜索到相关员工，请核对员工姓名是否正确')
-        // }
-      })
-      .catch((err) => {
-        this.$message.error('请求出错了：' + err.message)
-      })
-  }
-
-  // 添加
-  private addEmployeeHandle(st: string, username: string) {
-    if (st === 'add') {
-      this.$router.push({ path: '/employee/add' })
-    } else {
-      if (username === 'admin') {
-        return
-      }
-      this.$router.push({ path: '/employee/add', query: { id: st } })
-    }
-  }
-
-  //状态修改
-  private statusHandle(row: any) {
-    if (row.username === 'admin') {
-      return
-    }
-    this.id = row.id
-    this.status = row.status
-    this.$confirm('确认调整该账号的状态?', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }).then(() => {
-      enableOrDisableEmployee({ id: this.id, status: !this.status ? 1 : 0 })
-        .then((res) => {
-          if (String(res.status) === '200') {
-            this.$message.success('账号状态更改成功！')
-            this.init()
+      getEmployeeList(params)
+        .then((res: any) => {
+          if (res.data.code === 1) {
+            this.tableData = (res.data.data && res.data.data.records) || []
+            this.total = Number((res.data.data && res.data.data.total) || 0)
           }
         })
-        .catch((err) => {
-          this.$message.error('请求出错了：' + err.message)
+        .catch((err: any) => this.$message.error('请求失败：' + err.message))
+        .finally(() => { this.loading = false })
+    },
+
+    handleSearch() { this.query.page = 1; this.loadData() },
+    handleReset() {
+      this.query = { page: 1, pageSize: 10, name: '' }
+      this.loadData()
+    },
+    handlePageChange(p: number) { this.query.page = p; this.loadData() },
+    handleSizeChange(s: number) { this.query.pageSize = s; this.query.page = 1; this.loadData() },
+
+    handleAdd() {
+      this.form = { id: null, username: '', name: '', phone: '', sex: '1', idNumber: '', role: 3 }
+      this.dialogVisible = true
+    },
+
+    handleEdit(row: any) {
+      queryEmployeeById(String(row.id)).then((res: any) => {
+        if (res.data.code === 1 && res.data.data) {
+          const d = res.data.data
+          this.form = {
+            id: d.id,
+            username: d.username,
+            name: d.name,
+            phone: d.phone,
+            sex: d.sex || '1',
+            idNumber: d.idNumber || '',
+            role: d.role || 3
+          }
+          this.dialogVisible = true
+        }
+      })
+    },
+
+    handleSubmit() {
+      (this.$refs.formRef as any).validate((valid: boolean) => {
+        if (!valid) return
+        const req = this.form.id ? editEmployee(this.form) : addEmployee(this.form)
+        req
+          .then((res: any) => {
+            if (res.data.code === 1) {
+              this.$message.success(this.form.id ? '修改成功' : '新增成功')
+              this.dialogVisible = false
+              this.loadData()
+            } else {
+              // 账号重复等情况后端会返回原因
+              this.$message.error(res.data.msg || '保存失败')
+            }
+          })
+          .catch((err: any) => this.$message.error('请求失败：' + err.message))
+      })
+    },
+
+    handleStatus(row: any) {
+      const next = row.status === 1 ? 0 : 1
+      this.$confirm(next === 0 ? '锁定后该账号将无法登录，确认？' : '确认启用该账号？', '提示', { type: 'warning' })
+        .then(() => {
+          enableOrDisableEmployee({ status: next, id: row.id }).then((res: any) => {
+            if (res.data.code === 1) {
+              this.$message.success(next === 1 ? '已启用' : '已锁定')
+              this.loadData()
+            } else {
+              this.$message.error(res.data.msg || '操作失败')
+            }
+          })
         })
-    })
-  }
+        .catch(() => {})
+    },
 
-  private handleSizeChange(val: any) {
-    this.pageSize = val
-    this.init()
+    handleDelete(row: any) {
+      // 后端没有单独的删除员工接口，这里用「锁定」代替，保留操作痕迹
+      this.$message.info('平台不提供删除账号，请使用「锁定」停用该账号')
+    }
   }
-
-  private handleCurrentChange(val: any) {
-    this.page = val
-    this.init()
-  }
-}
+})
 </script>
 
-<style lang="scss" scoped>
-.disabled-text {
-  color: #bac0cd !important;
-}
+<style scoped>
+.page-wrap { padding: 16px; }
+.search-card { margin-bottom: 12px; }
+.table-card { margin-bottom: 16px; }
+.pager { margin-top: 14px; text-align: right; }
+.tip { color: #999; font-size: 12px; line-height: 1.5; }
+.danger-text { color: #f56c6c; }
 </style>

@@ -54,11 +54,11 @@
       <el-radio-group v-model="setStatus">
         <el-radio :label="1">
           营业中
-          <span>当前餐厅处于营业状态，自动接收任何订单，可点击打烊进入店铺打烊状态。</span>
+          <span>平台处于营业状态，用户可以正常下单预约服务。点击打烊后，用户端将无法提交新的预约订单。</span>
         </el-radio>
         <el-radio :label="0">
           打烊中
-          <span>当前餐厅处于打烊状态，仅接受营业时间内的预定订单，可点击营业中手动恢复营业状态。</span>
+          <span>平台处于打烊状态，用户无法提交新的预约订单。点击营业中即可恢复接单。</span>
         </el-radio>
       </el-radio-group>
       <span slot="footer"
@@ -87,8 +87,6 @@ import Cookies from 'js-cookie'
 import { debounce, throttle } from '@/utils/common'
 import { setNewData, getNewData } from '@/utils/cookies'
 
-// 接口
-import { getCountUnread } from '@/api/inform'
 // 修改密码弹层
 import Password from '../components/password.vue'
 
@@ -250,16 +248,6 @@ export default class extends Vue {
     // this.$router.push(`/login?redirect=${this.$route.fullPath}`)
   }
   // 获取未读消息
-  async getCountUnread() {
-    const { data } = await getCountUnread()
-    if (data.code === 1) {
-      // this.ountUnread = data.data
-      AppModule.StatusNumber(data.data)
-      // setNewData(data.data)
-      // this.$message.success('操作成功！')
-    } else {
-      this.$message.error(data.msg)
-    }
   }
   // 营业状态
   async getStatus() {
