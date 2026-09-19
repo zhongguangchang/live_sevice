@@ -677,13 +677,16 @@ if ($flowOrderId) {
 # ---- 取消订单与名额回补 ----
 $cancelSlotId = Pick-Slot -ProviderId 7003
 if (-not $cancelSlotId) { $cancelSlotId = Pick-Slot }
-$r = User DELETE '/cart/clean'
-$r = User POST '/cart/add' @{ serviceId = 1001 }
-$r = User POST '/serviceOrder/submit' @{ addressBookId = [long]$addrId; slotId = [long]$cancelSlotId; serviceMode = 1; payMethod = 1 }
+# 说明：下单接口有「同一用户 10 秒内最多 3 次」的限流，
+# 所以下面每个场景换一个用户来下单，既贴近真实（不同消费者），
+# 也不会互相触发限流导致用例假失败。服务清单是按用户存的，要各自加
+$null = User DELETE '/cart/clean' -UserId 8002
+$null = User POST '/cart/add' @{ serviceId = 1001 } -UserId 8002
+$r = User POST '/serviceOrder/submit' @{ addressBookId = 8503; slotId = [long]$cancelSlotId; serviceMode = 1; payMethod = 1 } -UserId 8002
 Check '（取消流程）提交订单' (Ok $r) ($r.Raw)
 $cancelOrderId = if (Ok $r) { $r.Data.id } else { $null }
 if ($cancelOrderId) {
-    $r = User PUT "/serviceOrder/cancel/$cancelOrderId"
+    $r = User PUT "/serviceOrder/cancel/$cancelOrderId" -UserId 8002
     Check '用户取消未付款订单' (Ok $r) ($r.Raw)
     Check '取消后状态=7 已取消' ((Sql1 "select status from service_order where id=$cancelOrderId") -eq '7') '状态不对'
     $r2 = User GET "/slot/available?serviceId=1001&serviceDate=$script:Tomorrow"
@@ -694,16 +697,16 @@ if ($cancelOrderId) {
 # 已付款订单取消
 $paidCancelSlot = Pick-Slot -ProviderId 7002
 if (-not $paidCancelSlot) { $paidCancelSlot = Pick-Slot }
-$r = User DELETE '/cart/clean'
-$r = User POST '/cart/add' @{ serviceId = 1001 }
-$r = User POST '/serviceOrder/submit' @{ addressBookId = [long]$addrId; slotId = [long]$paidCancelSlot; serviceMode = 1; payMethod = 1 }
+$null = User DELETE '/cart/clean' -UserId 8003
+$null = User POST '/cart/add' @{ serviceId = 1001 } -UserId 8003
+$r = User POST '/serviceOrder/submit' @{ addressBookId = 8504; slotId = [long]$paidCancelSlot; serviceMode = 1; payMethod = 1 } -UserId 8003
 $paidCancelOrderId = if (Ok $r) { $r.Data.id } else { $null }
 $paidCancelNo = if (Ok $r) { $r.Data.orderNumber } else { $null }
 if ($paidCancelOrderId) {
-    $r = User PUT '/serviceOrder/payment' @{ orderNumber = $paidCancelNo; payMethod = 1 }
+    $r = User PUT '/serviceOrder/payment' @{ orderNumber = $paidCancelNo; payMethod = 1 } -UserId 8003
     Check '（已付款取消）支付' (Ok $r) ($r.Raw)
     Check '（已付款取消）支付后库存已落账' ((Sql1 "select booked_count from slot where id=$paidCancelSlot") -eq '1') '未落账'
-    $r = User PUT "/serviceOrder/cancel/$paidCancelOrderId"
+    $r = User PUT "/serviceOrder/cancel/$paidCancelOrderId" -UserId 8003
     Check '（已付款取消）取消订单' (Ok $r) ($r.Raw)
     Check '（已付款取消）MySQL 库存已回补' ((Sql1 "select booked_count from slot where id=$paidCancelSlot") -eq '0') '没有回补'
 }
@@ -715,7 +718,7 @@ $r = Admin PUT '/shop/0'
 Check '设置平台打烊' (Ok $r) ($r.Raw)
 $r = User DELETE '/cart/clean'
 $r = User POST '/cart/add' @{ serviceId = 1001 }
-$r = User POST '/serviceOrder/submit' @{ addressBookId = [long]$addrId; slotId = [long]$shopSlot; serviceMode = 1; payMethod = 1 }
+$r = User POST '/serviceOrder/submit' @{ slotId = [long]$shopSlot; serviceMode = 2; payMethod = 1 } -UserId 8004
 Check '打烊期间下单被拒绝' (-not (Ok $r) -and $r.Msg -match '打烊') ($r.Raw)
 $r = Admin PUT '/shop/1'
 Check '恢复营业状态' (Ok $r) ($r.Raw)
@@ -785,20 +788,20 @@ $casSlotId = Pick-Slot -ProviderId 7002
 if (-not $casSlotId) { $casSlotId = Pick-Slot }
 if ($casSlotId) {
     $null = Admin POST "/slot/warmup?begin=$script:Tomorrow&end=$script:Tomorrow"
-    $r = User DELETE '/cart/clean'
-    $r = User POST '/cart/add' @{ serviceId = 1001 }
-    $r = User POST '/serviceOrder/submit' @{ addressBookId = [long]$addrId; slotId = [long]$casSlotId; serviceMode = 1; payMethod = 1 }
+    $null = User DELETE '/cart/clean' -UserId 8005
+    $null = User POST '/cart/add' @{ serviceId = 1001 } -UserId 8005
+    $r = User POST '/serviceOrder/submit' @{ slotId = [long]$casSlotId; serviceMode = 2; payMethod = 1 } -UserId 8005
     $casOrderId = if (Ok $r) { $r.Data.id } else { $null }
     $casOrderNo = if (Ok $r) { $r.Data.orderNumber } else { $null }
     Check '（CAS 测试）下单成功' (Ok $r) ($r.Raw)
     if ($casOrderId) {
         # 人为把 MySQL 的已预约数顶满，模拟「Redis 说有名额、MySQL 其实已经卖完」的不一致场景
         Sql "update slot set booked_count = total_stock where id = $casSlotId" | Out-Null
-        $r = User PUT '/serviceOrder/payment' @{ orderNumber = $casOrderNo; payMethod = 1 }
+        $r = User PUT '/serviceOrder/payment' @{ orderNumber = $casOrderNo; payMethod = 1 } -UserId 8005
         Check '支付时 MySQL 落账失败会拦住（不会超卖）' (-not (Ok $r)) ($r.Raw)
         Check '落账失败时订单不会变成已支付' ((Sql1 "select status from service_order where id=$casOrderId") -eq '1') '状态被改了'
         Sql "update slot set booked_count = 0 where id = $casSlotId" | Out-Null
-        $r = User PUT "/serviceOrder/cancel/$casOrderId"
+        $r = User PUT "/serviceOrder/cancel/$casOrderId" -UserId 8005
         Check '（CAS 测试）清理：取消订单回补名额' (Ok $r) ($r.Raw)
     }
 }
@@ -821,15 +824,15 @@ $mqSlotId = Pick-Slot -ProviderId 7001
 if (-not $mqSlotId) { $mqSlotId = Pick-Slot }
     $orderDelayBefore = Get-QueueDepth 'life.order.delay.queue'
     $dispatchDelayBefore = Get-QueueDepth 'life.dispatch.delay.queue'
-    $r = User DELETE '/cart/clean'
-    $r = User POST '/cart/add' @{ serviceId = 1001 }
-    $r = User POST '/serviceOrder/submit' @{ addressBookId = [long]$addrId; slotId = [long]$mqSlotId; serviceMode = 1; payMethod = 1 }
+    $null = User DELETE '/cart/clean' -UserId 8006
+    $null = User POST '/cart/add' @{ serviceId = 1001 } -UserId 8006
+    $r = User POST '/serviceOrder/submit' @{ slotId = [long]$mqSlotId; serviceMode = 2; payMethod = 1 } -UserId 8006
     $mqOrderId = if (Ok $r) { $r.Data.id } else { $null }
     $mqOrderNo = if (Ok $r) { $r.Data.orderNumber } else { $null }
     $orderDelay = Wait-QueueDepthUp -QueueName 'life.order.delay.queue' -Before $orderDelayBefore
     Check '下单后「超时未支付」延迟消息已进入延迟队列' ($orderDelay -gt $orderDelayBefore) ("下单前 " + $orderDelayBefore + " 下单后 " + $orderDelay)
 
-    $r = User PUT '/serviceOrder/payment' @{ orderNumber = $mqOrderNo; payMethod = 1 }
+    $r = User PUT '/serviceOrder/payment' @{ orderNumber = $mqOrderNo; payMethod = 1 } -UserId 8006
     Check '（MQ 测试）支付成功' (Ok $r) ($r.Raw)
     $dispatchDelay = Wait-QueueDepthUp -QueueName 'life.dispatch.delay.queue' -Before $dispatchDelayBefore
     Check '支付后「派单超时转派」延迟消息已发出' ($dispatchDelay -gt $dispatchDelayBefore) ("支付前 " + $dispatchDelayBefore + " 支付后 " + $dispatchDelay)
@@ -845,13 +848,13 @@ if (-not $mqSlotId) { $mqSlotId = Pick-Slot }
         #   B（dispatch_count=3）应该被上限拦住，不再转派
         $capSlotId = Pick-Slot -ProviderId 7002
         if (-not $capSlotId) { $capSlotId = Pick-Slot }
-        $null = User DELETE '/cart/clean'
-        $null = User POST '/cart/add' @{ serviceId = 1001 }
-        $r = User POST '/serviceOrder/submit' @{ addressBookId = [long]$addrId; slotId = [long]$capSlotId; serviceMode = 1; payMethod = 1; remark = '【测试】转派上限' }
+        $null = User DELETE '/cart/clean' -UserId 8007
+        $null = User POST '/cart/add' @{ serviceId = 1001 } -UserId 8007
+        $r = User POST '/serviceOrder/submit' @{ slotId = [long]$capSlotId; serviceMode = 2; payMethod = 1; remark = '【测试】转派上限' } -UserId 8007
         $capOrderId = if (Ok $r) { $r.Data.id } else { $null }
         $capOrderNo = if (Ok $r) { $r.Data.orderNumber } else { $null }
         if ($capOrderId) {
-            $r = User PUT '/serviceOrder/payment' @{ orderNumber = $capOrderNo; payMethod = 1 }
+            $r = User PUT '/serviceOrder/payment' @{ orderNumber = $capOrderNo; payMethod = 1 } -UserId 8007
             Check '（上限验证）第二单支付成功' (Ok $r) ($r.Raw)
             Sql "update service_order set dispatch_count = 3 where id = $capOrderId" | Out-Null
         }
@@ -878,6 +881,49 @@ if (-not $mqSlotId) { $mqSlotId = Pick-Slot }
 catch {
     Write-Host ('  [跳过] RabbitMQ 管理台不可达：' + $_.Exception.Message) -ForegroundColor Yellow
 }
+
+# ============================================================================
+#  十一、接口限流与缓存
+# ============================================================================
+Write-Section '十一、接口限流与缓存'
+
+# ---- 限流：同一用户短时间内超过阈值应被拒绝 ----
+# 用「空清单下单」来触发限流校验：它一定会走到业务层并被拒绝，
+# 但不会真的产生订单，正好用来观察限流是否生效
+$rateLimited = 0
+$businessRejected = 0
+for ($i = 1; $i -le 6; $i++) {
+    $r = User POST '/serviceOrder/submit' @{ slotId = [long]$raceSlotId; serviceMode = 2; payMethod = 1 } -UserId 8099
+    if ($r.Msg -match '频繁') { $rateLimited++ } else { $businessRejected++ }
+}
+Check '连续请求超过阈值后被限流' ($rateLimited -ge 1) ("被限流 " + $rateLimited + " 次，正常校验 " + $businessRejected + " 次")
+Check '限流阈值内的请求能正常通过（不是一上来就拦）' ($businessRejected -ge 1) ("正常校验 " + $businessRejected + " 次")
+
+# ---- 缓存：读两次应命中缓存；改数据后缓存要立刻失效 ----
+$r1 = User GET '/service/1001'
+$r2 = User GET '/service/1001'
+Check '服务详情可重复读取（缓存不破坏结果）' (Ok $r1 -and $r2 -and $r1.Data.name -eq $r2.Data.name) ($r2.Raw)
+
+# 用第五节建的那个测试服务来做缓存失效验证（改它不会动到演示数据；
+# 改演示数据里的服务会连带删掉它的规格，得不偿失）
+$cacheCatId = [long]$catId
+$cacheItemId = [long]$itemId
+$cacheItemName = Sql1 "select name from service_item where id = $cacheItemId"
+
+# 先读一次用户端列表，把该分类的服务列表灌进缓存
+$listBefore = User GET "/service/list?categoryId=$cacheCatId"
+$cachedName = ($listBefore.Data | Where-Object { $_.id -eq $cacheItemId }).name
+Check '用户端按分类查服务（已回填缓存）' ($cachedName -eq $cacheItemName) ("读到 " + $cachedName)
+
+# 走管理端接口改名（会触发缓存失效；改完再查用户端必须立刻看到新名字）
+$newCacheName = $cacheItemName + '·改名'
+$null = Admin PUT '/serviceItem' @{
+    id = $cacheItemId; name = $newCacheName; categoryId = $cacheCatId
+    price = 99.00; unit = '次'; duration = 90; serviceMode = 1; status = 1
+}
+$listAfter = User GET "/service/list?categoryId=$cacheCatId"
+$hitName = ($listAfter.Data | Where-Object { $_.id -eq $cacheItemId }).name
+Check '管理端改服务后用户端缓存立即失效（不是旧数据）' ($hitName -eq $newCacheName) ("读到 " + $hitName + "，期望 " + $newCacheName)
 
 # ============================================================================
 #  清理测试数据
