@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ReportMapper">
+
+    <!--
+      营业额按天聚合。
+
+      两个 where 条件都不能少：
+        pay_status = 1  已经收到钱
+        status in (5,6) 服务真的做完了
+      只按 pay_status 统计的话，付了钱但后来退掉/取消的订单会被算进营业额；
+      只按 status 统计的话，还没付款的订单也会被算进去。
+
+      归集日期用 checkout_time（支付时间）而不是 order_time：
+      用户 23:58 下单、00:01 付款，钱是第二天到账的，按下单日算报表会对不上。
+    -->
+    <select id="turnoverByDate" resultType="java.util.Map">
+        select date_format(checkout_time, '%Y-%m-%d') as date, sum(amount) as value
+        from service_order
+        where pay_status = 1
+          and status in (5, 6)
+          and checkout_time &gt;= #{begin}
+          and checkout_time &lt; #{end}
+        group by date_format(checkout_time, '%Y-%m-%d')
+        order by date
+    </select>
+
+    <!--
+      新增用户按注册（首次登录）日期聚合。
+      条件里也带上了时间范围，配合索引走范围扫描，
+      不会把全表扫一遍。
+    -->
+    <select id="newUserByDate" resultType="java.util.Map">
+        select date_format(create_time, '%Y-%m-%d') as date, count(id) as value
+        from user
+        where create_time &gt;= #{begin}
+          and create_time &lt; #{end}
+        group by date_format(create_time, '%Y-%m-%d')
+        order by date
+    </select>
+
+    <!--
+      订单量按天聚合，一条 SQL 同时算出「总单量」和「有效单量」。
+      用 sum(case when ...) 而不是查两次，能少扫一遍表，
+      也保证两个数字来自同一份快照，不会因为期间有新订单而互相矛盾。
+    -->
+    <select id="orderCountByDate" resultType="java.util.Map">
+        select date_format(order_time, '%Y-%m-%d')                                as date,
+               count(id)                                                          as total,
+               sum(case when status in (5, 6) then 1 else 0 end)                  as valid
+        from service_order
+        where order_time &gt;= #{begin}
+          and order_time &lt; #{end}
+        group by date_format(order_time, '%Y-%m-%d')
+        order by date
+    </select>
+
+    <!--
+      销量 Top N：按订单明细里的服务名聚合。
+
+      为什么按明细表的 name 聚合而不是按 service_id 关联 service_item：
+      服务项目可能改名甚至下架，按 id 关联会漏掉历史数据，
+      而明细表里的 name 是下单当时的快照，报表要的就是这个事实。
+    -->
+    <select id="salesTopN" resultType="java.util.Map">
+        select oi.name as name, sum(oi.number) as value
+        from service_order_item oi
+        inner join service_order o on oi.order_id = o.id
+        where o.status in (5, 6)
+          and o.pay_status = 1
+          and o.order_time &gt;= #{begin}
+          and o.order_time &lt; #{end}
+        group by oi.name
+        order by value desc
+        limit #{limit}
+    </select>
+
+    <select id="countUserBefore" resultType="java.lang.Integer">
+        select count(id) from user where create_time &lt; #{before}
+    </select>
+
+    <select id="countOrderBefore" resultType="java.lang.Integer">
+        select count(id) from service_order where order_time &lt; #{before}
+    </select>
+
+    <!--
+      有效订单数与营业额合计。
+      这两个查询的时间和口径都是「checkout_time + pay_status」，
+      所以放在一起，避免以后改口径时只改了一半。
+      begin/end 允许为空：为空表示累计口径（全部历史）。
+    -->
+    <select id="countValidOrder" resultType="java.lang.Integer">
+        select count(id) from service_order
+        where status in (5, 6)
+        <if test="begin != null">
+            and order_time &gt;= #{begin}
+        </if>
+        <if test="end != null">
+            and order_time &lt; #{end}
+        </if>
+    </select>
+
+    <select id="sumTurnover" resultType="java.math.BigDecimal">
+        select sum(amount) from service_order
+        where pay_status = 1
+          and status in (5, 6)
+        <if test="begin != null">
+            and checkout_time &gt;= #{begin}
+        </if>
+        <if test="end != null">
+            and checkout_time &lt; #{end}
+        </if>
+    </select>
+
+</mapper>

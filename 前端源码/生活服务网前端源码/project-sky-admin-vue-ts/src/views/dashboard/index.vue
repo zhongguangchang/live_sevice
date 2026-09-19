@@ -22,9 +22,26 @@
             <i :class="s.icon" />
           </div>
           <div class="stat-body">
-            <div class="stat-num">{{ stats[s.key] || 0 }}</div>
+            <div class="stat-num">{{ overview[s.key] || 0 }}</div>
             <div class="stat-label">{{ s.label }}</div>
           </div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <!-- 今日经营 + 近 7 天趋势 -->
+    <div class="section-title">今日经营</div>
+    <el-row :gutter="14">
+      <el-col :span="6" v-for="t in todayStats" :key="t.key">
+        <div class="today-card">
+          <div class="today-label">{{ t.label }}</div>
+          <div class="today-num">{{ t.value }}</div>
+        </div>
+      </el-col>
+      <el-col :span="6">
+        <div class="today-card turnover-card">
+          <div class="today-label">近 7 天营业额趋势</div>
+          <div ref="trendChart" class="trend-chart" />
         </div>
       </el-col>
     </el-row>
@@ -45,56 +62,93 @@
 
 <script lang="ts">
 import Vue from 'vue'
-import { getServiceOrderStatistics } from '@/api/serviceOrder'
-import { getServiceItemPage } from '@/api/serviceItem'
-import { getServicePackagePage } from '@/api/servicePackage'
-import { getProviderPage } from '@/api/provider'
+import * as echarts from 'echarts'
+import { getBusinessOverview } from '@/api/report'
 
 export default Vue.extend({
   name: 'Dashboard',
 
   data() {
     return {
-      stats: {} as any,
+      // 所有数字都来自同一个概览接口：
+      // 原来要调 4 个接口各取一个字段，任何一次失败都会让页面缺一块
+      overview: {} as any,
+      trendChart: null as any,
       orderStats: [
         { key: 'toBeAccepted', label: '待接单', icon: 'el-icon-bell', color: '#E6A23C', bg: '#FDF6EC' },
         { key: 'accepted', label: '已接单', icon: 'el-icon-user', color: '#2B6DE8', bg: '#ECF2FE' },
         { key: 'inService', label: '服务中', icon: 'el-icon-time', color: '#67C23A', bg: '#F0F9EB' },
         { key: 'toBeReviewed', label: '待评价', icon: 'el-icon-chat-dot-round', color: '#909399', bg: '#F4F4F5' }
       ],
+      todayStats: [
+        { key: 'todayTurnover', label: '今日营业额（元）', value: '0.00' },
+        { key: 'todayOrderCount', label: '今日新增订单', value: '0' },
+        { key: 'todayUserCount', label: '今日新增用户', value: '0' }
+      ] as any[],
       resources: [
-        { key: 'item', label: '在售服务项目', value: '-', action: '管理服务项目', path: '/serviceItem' },
-        { key: 'pkg', label: '已启用套餐', value: '-', action: '管理服务套餐', path: '/servicePackage' },
-        { key: 'provider', label: '可接单服务人员', value: '-', action: '管理服务人员', path: '/provider' }
+        { key: 'serviceItemCount', label: '在售服务项目', value: '-', action: '管理服务项目', path: '/serviceItem' },
+        { key: 'servicePackageCount', label: '已启用套餐', value: '-', action: '管理服务套餐', path: '/servicePackage' },
+        { key: 'providerCount', label: '可接单服务人员', value: '-', action: '管理服务人员', path: '/provider' }
       ] as any[]
     }
   },
 
   created() {
-    this.loadStats()
-    this.loadResources()
+    this.loadOverview()
+  },
+
+  mounted() {
+    window.addEventListener('resize', this.resizeChart)
+  },
+
+  beforeDestroy() {
+    window.removeEventListener('resize', this.resizeChart)
   },
 
   methods: {
-    loadStats() {
-      getServiceOrderStatistics().then((res: any) => {
-        if (res.data.code === 1) this.stats = res.data.data || {}
+    loadOverview() {
+      getBusinessOverview().then((res: any) => {
+        if (res.data.code !== 1) return
+        this.overview = res.data.data || {}
+
+        this.todayStats[0].value = Number(this.overview.todayTurnover || 0).toFixed(2)
+        this.todayStats[1].value = String(this.overview.todayOrderCount || 0)
+        this.todayStats[2].value = String(this.overview.todayUserCount || 0)
+
+        this.resources.forEach((r) => {
+          r.value = String(this.overview[r.key] || 0)
+        })
+
+        this.$nextTick(this.renderTrend)
       })
     },
 
-    /**
-     * 资源数量直接用分页接口返回的 total，pageSize 传 1 只为了拿总数
-     */
-    loadResources() {
-      getServiceItemPage({ page: 1, pageSize: 1, status: 1 }).then((res: any) => {
-        if (res.data.code === 1) this.resources[0].value = res.data.data.total
-      })
-      getServicePackagePage({ page: 1, pageSize: 1, status: 1 }).then((res: any) => {
-        if (res.data.code === 1) this.resources[1].value = res.data.data.total
-      })
-      getProviderPage({ page: 1, pageSize: 1, status: 1 }).then((res: any) => {
-        if (res.data.code === 1) this.resources[2].value = res.data.data.total
-      })
+    renderTrend() {
+      const dom = this.$refs.trendChart as HTMLElement
+      if (!dom) return
+      if (!this.trendChart) this.trendChart = echarts.init(dom)
+      this.trendChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 8, right: 12, top: 20, bottom: 4, containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: this.overview.recentDateList || [],
+          axisLabel: { fontSize: 10 }
+        },
+        yAxis: { type: 'value', show: false },
+        series: [{
+          type: 'line',
+          smooth: true,
+          symbolSize: 5,
+          data: this.overview.recentTurnoverList || [],
+          itemStyle: { color: '#2B6DE8' },
+          areaStyle: { opacity: 0.15 }
+        }]
+      }, true)
+    },
+
+    resizeChart() {
+      if (this.trendChart) this.trendChart.resize()
     }
   }
 })
@@ -184,6 +238,34 @@ export default Vue.extend({
     font-size: 13px;
     color: #909399;
   }
+}
+
+.today-card {
+  height: 96px;
+  padding: 18px 20px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #EBEEF5;
+
+  .today-label {
+    font-size: 13px;
+    color: #909399;
+  }
+  .today-num {
+    margin-top: 8px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #1B2437;
+  }
+}
+
+.turnover-card {
+  padding-bottom: 6px;
+}
+
+.trend-chart {
+  width: 100%;
+  height: 46px;
 }
 
 .res-card {

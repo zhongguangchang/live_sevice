@@ -115,6 +115,15 @@ const router = new Router({
           }
         },
         {
+          path: "/statistics",
+          component: () =>
+            import(/* webpackChunkName: "statistics" */ "@/views/statistics/index.vue"),
+          meta: {
+            title: "数据统计",
+            icon: "icon-statistics"
+          }
+        },
+        {
           path: "/serviceArea",
           component: () =>
             import(/* webpackChunkName: "serviceArea" */ "@/views/serviceArea/index.vue"),
