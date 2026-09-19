@@ -4,6 +4,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.sky.constant.MessageConstant;
 import com.sky.constant.StatusConstant;
+import com.sky.constant.RedisKeyConstant;
 import com.sky.dto.ServiceItemDTO;
 import com.sky.dto.ServiceItemPageQueryDTO;
 import com.sky.entity.ServiceItem;
@@ -15,6 +16,7 @@ import com.sky.mapper.ServiceSpecMapper;
 import com.sky.result.PageResult;
 import com.sky.service.ServiceItemService;
 import com.sky.vo.ServiceItemVO;
+import com.sky.utils.CacheHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,12 +35,20 @@ import java.util.Map;
 @Slf4j
 public class ServiceItemServiceImpl implements ServiceItemService {
 
+    /** 服务项目详情缓存时长（秒） */
+    private static final int ITEM_CACHE_SECONDS = 30 * 60;
+
+    /** 按分类查询在售服务列表的缓存时长（秒） */
+    private static final int LIST_CACHE_SECONDS = 10 * 60;
+
     @Autowired
     private ServiceItemMapper serviceItemMapper;
     @Autowired
     private ServiceSpecMapper serviceSpecMapper;
     @Autowired
     private ServicePackageItemMapper servicePackageItemMapper;
+    @Autowired
+    private CacheHelper cacheHelper;
 
     @Override
     @Transactional
@@ -49,6 +59,7 @@ public class ServiceItemServiceImpl implements ServiceItemService {
 
         serviceItemMapper.insert(item);
         saveSpecs(item.getId(), dto.getSpecs());
+        evictItemCaches(item.getId());
     }
 
     /**
@@ -100,6 +111,7 @@ public class ServiceItemServiceImpl implements ServiceItemService {
         // 规格全删重插
         serviceSpecMapper.deleteByServiceId(item.getId());
         saveSpecs(item.getId(), dto.getSpecs());
+        evictItemCaches(item.getId());
     }
 
     @Override
@@ -132,6 +144,18 @@ public class ServiceItemServiceImpl implements ServiceItemService {
 
     @Override
     public ServiceItemVO getByIdWithSpecs(Long id) {
+        // 详情页是最热的读接口之一（小程序每次进入服务详情都会调），
+        // 缓存起来能省掉一次主表查询 + 一次规格查询。
+        // 缓存 null 是故意的：不存在的 id 也会被缓存 60 秒，防止有人拿
+        // 随机 id 反复刷接口把数据库打满（缓存穿透）
+        return cacheHelper.getOrLoad(
+                RedisKeyConstant.CACHE_SERVICE_ITEM_PREFIX + id,
+                ServiceItemVO.class,
+                () -> loadItemDetail(id),
+                ITEM_CACHE_SECONDS);
+    }
+
+    private ServiceItemVO loadItemDetail(Long id) {
         ServiceItem item = serviceItemMapper.getById(id);
         if (item == null) {
             return null;
@@ -162,16 +186,32 @@ public class ServiceItemServiceImpl implements ServiceItemService {
         }
         serviceSpecMapper.deleteByServiceIds(ids);
         serviceItemMapper.deleteByIds(ids);
+        for (Long id : ids) {
+            evictItemCaches(id);
+        }
     }
 
     @Override
     public void startOrStop(Integer status, Long id) {
         ServiceItem item = ServiceItem.builder().id(id).status(status).build();
         serviceItemMapper.update(item);
+        evictItemCaches(id);
     }
 
     @Override
     public List<ServiceItemVO> listByCategoryId(Long categoryId) {
+        // 小程序首页按分类刷服务列表，是并发最高的读接口。
+        // 这里缓存的是「某个分类下的在售服务」，key 里带 categoryId，
+        // 所以任意一个分类的列表更新只影响自己那一个 key
+        return cacheHelper.getOrLoad(
+                RedisKeyConstant.CACHE_SERVICE_LIST_PREFIX + categoryId,
+                new com.alibaba.fastjson.TypeReference<List<ServiceItemVO>>() {
+                }.getType(),
+                () -> loadListByCategoryId(categoryId),
+                LIST_CACHE_SECONDS);
+    }
+
+    private List<ServiceItemVO> loadListByCategoryId(Long categoryId) {
         List<ServiceItem> items = serviceItemMapper.listOnSaleByCategoryId(categoryId);
         List<ServiceItemVO> result = new ArrayList<>();
         for (ServiceItem item : items) {
@@ -181,6 +221,24 @@ public class ServiceItemServiceImpl implements ServiceItemService {
             result.add(vo);
         }
         return result;
+    }
+
+    /**
+     * 服务项目发生任何变更时清理相关缓存
+     * <p>
+     * <b>这一步比缓存本身更重要。</b>只加缓存不失效，运营改完价格
+     * 小程序上还是旧价格，用户按旧价下单、后台按新价结算，
+     * 这种问题比「慢一点」严重得多。
+     * <p>
+     * 这里选择「按前缀整体清掉」而不是精确删除某个 key：
+     * 一个服务可能出现在多个分类列表里，逐个算清楚容易漏，
+     * 服务项目本来就不多，整体清掉的代价完全可以接受。
+     */
+    private void evictItemCaches(Long itemId) {
+        if (itemId != null) {
+            cacheHelper.evict(RedisKeyConstant.CACHE_SERVICE_ITEM_PREFIX + itemId);
+        }
+        cacheHelper.evictByPrefix(RedisKeyConstant.CACHE_SERVICE_LIST_PREFIX);
     }
 
     @Override

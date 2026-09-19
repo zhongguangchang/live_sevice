@@ -13,13 +13,13 @@
 
         <dependency>
             <groupId>com.sky</groupId>
-            <artifactId>sky-common</artifactId>
+            <artifactId>live-common</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
         <dependency>
             <groupId>com.sky</groupId>
-            <artifactId>sky-pojo</artifactId>
+            <artifactId>live-pojo</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 

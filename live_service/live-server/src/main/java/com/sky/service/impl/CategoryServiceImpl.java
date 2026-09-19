@@ -3,6 +3,7 @@ package com.sky.service.impl;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.sky.constant.MessageConstant;
+import com.sky.constant.RedisKeyConstant;
 import com.sky.constant.StatusConstant;
 import com.sky.context.BaseContext;
 import com.sky.dto.CategoryDTO;
@@ -14,6 +15,7 @@ import com.sky.mapper.ServiceItemMapper;
 import com.sky.mapper.ServicePackageMapper;
 import com.sky.result.PageResult;
 import com.sky.service.CategoryService;
+import com.sky.utils.CacheHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,12 +30,17 @@ import java.util.List;
 @Slf4j
 public class CategoryServiceImpl implements CategoryService {
 
+    /** 分类列表缓存时长（秒） */
+    private static final int LIST_CACHE_SECONDS = 30 * 60;
+
     @Autowired
     private CategoryMapper categoryMapper;
     @Autowired
     private ServiceItemMapper serviceItemMapper;
     @Autowired
     private ServicePackageMapper servicePackageMapper;
+    @Autowired
+    private CacheHelper cacheHelper;
 
     /**
      * 新增分类
@@ -54,6 +61,7 @@ public class CategoryServiceImpl implements CategoryService {
         //category.setUpdateUser(BaseContext.getCurrentId());
 
         categoryMapper.insert(category);
+        evictCategoryCache();
     }
 
     /**
@@ -87,6 +95,7 @@ public class CategoryServiceImpl implements CategoryService {
 
         //删除分类数据
         categoryMapper.deleteById(id);
+        evictCategoryCache();
     }
 
     /**
@@ -102,6 +111,7 @@ public class CategoryServiceImpl implements CategoryService {
         //category.setUpdateUser(BaseContext.getCurrentId());
 
         categoryMapper.update(category);
+        evictCategoryCache();
     }
 
     /**
@@ -117,6 +127,7 @@ public class CategoryServiceImpl implements CategoryService {
                 //.updateUser(BaseContext.getCurrentId())
                 .build();
         categoryMapper.update(category);
+        evictCategoryCache();
     }
 
     /**
@@ -125,6 +136,26 @@ public class CategoryServiceImpl implements CategoryService {
      * @return
      */
     public List<Category> list(Integer type) {
-        return categoryMapper.list(type);
+        // 分类列表是「读多写极少」的典型：运营改一次、用户读上万次，
+        // 最适合缓存。key 里带上 type（1 服务分类 / 2 套餐分类），
+        // 两类分类互不影响
+        return cacheHelper.getOrLoad(
+                RedisKeyConstant.CACHE_CATEGORY_LIST + ":" + type,
+                new com.alibaba.fastjson.TypeReference<List<Category>>() {
+                }.getType(),
+                () -> categoryMapper.list(type),
+                LIST_CACHE_SECONDS);
+    }
+
+    /**
+     * 分类变更后清掉分类缓存
+     * <p>
+     * 注意这里同时清了「服务列表」缓存：分类被停用后，
+     * 用户端不应该再看到这个分类下的服务，而服务列表是按分类缓存的，
+     * 只清分类本身会出现「分类没了、服务还在」的中间态
+     */
+    private void evictCategoryCache() {
+        cacheHelper.evictByPrefix(RedisKeyConstant.CACHE_CATEGORY_LIST);
+        cacheHelper.evictByPrefix(RedisKeyConstant.CACHE_SERVICE_LIST_PREFIX);
     }
 }

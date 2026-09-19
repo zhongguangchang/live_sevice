@@ -323,8 +323,23 @@ Check '订单状态统计 /admin/serviceOrder/statistics' (Ok $r -and $null -ne 
 $orderId = Sql1 'select id from service_order order by id desc limit 1'
 $r = Admin GET "/serviceOrder/details/$orderId"
 Check "订单详情 /admin/serviceOrder/details/$orderId" (Ok $r -and $r.Data.order.id) ($r.Raw)
-$r = Admin GET "/slot/list?serviceDate=$script:Tomorrow"
+    $r = Admin GET "/slot/list?serviceDate=$script:Tomorrow"
 Check '排期条件查询 /admin/slot/list' (Ok $r -and $r.Data.Count -gt 0) ($r.Raw)
+
+# 统计报表：接口要能返回「日期数组 + 数值数组」且长度一致，
+# 这是前端画折线图的前提，长度不一致时图表会错位
+$statBegin = (Get-Date).AddDays(-6).ToString('yyyy-MM-dd')
+$statEnd = (Get-Date).ToString('yyyy-MM-dd')
+$r = Admin GET "/report/overview"
+Check '经营概览 /admin/report/overview' (Ok $r -and $null -ne $r.Data.todayTurnover -and $r.Data.recentDateList.Count -eq 7) ($r.Raw)
+$r = Admin GET "/report/turnoverStatistics?begin=$statBegin&end=$statEnd"
+Check '营业额统计 /admin/report/turnoverStatistics' (Ok $r -and $r.Data.dateList.Count -eq 7 -and $r.Data.turnoverList.Count -eq 7) ($r.Raw)
+$r = Admin GET "/report/userStatistics?begin=$statBegin&end=$statEnd"
+Check '用户统计 /admin/report/userStatistics' (Ok $r -and $r.Data.newUserList.Count -eq 7 -and $r.Data.totalUserList.Count -eq 7) ($r.Raw)
+$r = Admin GET "/report/ordersStatistics?begin=$statBegin&end=$statEnd"
+Check '订单统计 /admin/report/ordersStatistics' (Ok $r -and $r.Data.orderCountList.Count -eq 7 -and $null -ne $r.Data.orderCompletionRate) ($r.Raw)
+$r = Admin GET "/report/top10?begin=$statBegin&end=$statEnd"
+Check '销量排名 /admin/report/top10' (Ok $r -and $r.Data.nameList.Count -eq $r.Data.numberList.Count) ($r.Raw)
 
 # ============================================================================
 #  三、用户端只读接口

@@ -1,5 +1,6 @@
 package com.sky.controller.user;
 
+import com.sky.annotation.RateLimit;
 import com.sky.dto.ReviewPageQueryDTO;
 import com.sky.dto.ReviewSubmitDTO;
 import com.sky.result.PageResult;
@@ -33,6 +34,7 @@ public class ReviewController {
      */
     @PostMapping("/submit")
     @ApiOperation("提交评价")
+    @RateLimit(key = "review:submit", seconds = 10, limit = 3)
     public Result submit(@RequestBody ReviewSubmitDTO reviewSubmitDTO) {
         log.info("提交评价：{}", reviewSubmitDTO);
         reviewService.submit(reviewSubmitDTO);

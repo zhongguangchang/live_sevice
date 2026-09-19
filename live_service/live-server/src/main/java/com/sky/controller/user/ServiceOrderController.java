@@ -1,5 +1,6 @@
 package com.sky.controller.user;
 
+import com.sky.annotation.RateLimit;
 import com.sky.context.BaseContext;
 import com.sky.dto.ServiceOrderPageQueryDTO;
 import com.sky.dto.ServiceOrderPaymentDTO;
@@ -43,6 +44,7 @@ public class ServiceOrderController {
      */
     @PostMapping("/submit")
     @ApiOperation("用户下单")
+    @RateLimit(key = "order:submit", seconds = 10, limit = 3)
     public Result<ServiceOrderSubmitVO> submit(@RequestBody ServiceOrderSubmitDTO serviceOrderSubmitDTO) {
         log.info("用户下单：{}", serviceOrderSubmitDTO);
         ServiceOrderSubmitVO vo = serviceOrderService.submitOrder(serviceOrderSubmitDTO);
@@ -59,6 +61,7 @@ public class ServiceOrderController {
      */
     @PutMapping("/payment")
     @ApiOperation("订单支付")
+    @RateLimit(key = "order:pay", seconds = 10, limit = 5)
     public Result payment(@RequestBody ServiceOrderPaymentDTO serviceOrderPaymentDTO) {
         log.info("订单支付：{}", serviceOrderPaymentDTO);
         serviceOrderService.paySuccess(
